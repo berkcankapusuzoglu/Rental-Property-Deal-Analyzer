@@ -1,5 +1,6 @@
 import os, json, re, webbrowser, threading
 from pathlib import Path
+from urllib.parse import urlparse
 from dotenv import load_dotenv
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, JSONResponse
@@ -307,9 +308,10 @@ async def scrape_zillow(request: Request):
     if not url:
         return JSONResponse({"error": "URL is required."}, status_code=400)
 
-    if "zillow.com" not in url.lower():
+    parsed = urlparse(url)
+    if not parsed.hostname or not parsed.hostname.endswith("zillow.com"):
         return JSONResponse(
-            {"error": "Invalid URL. Only Zillow URLs are supported (must contain zillow.com)."},
+            {"error": "Invalid URL. Only Zillow URLs are supported (must be a zillow.com link)."},
             status_code=400,
         )
 
@@ -410,8 +412,14 @@ async def analyze_ai(request: Request):
             status_code=502,
         )
 
-    data = resp.json()
-    text = data.get("content", [{}])[0].get("text", "")
+    try:
+        data = resp.json()
+        text = data["content"][0]["text"]
+    except (KeyError, IndexError, ValueError):
+        return JSONResponse(
+            {"error": "Unexpected response from AI service."},
+            status_code=502,
+        )
     return JSONResponse({"analysis": text})
 
 

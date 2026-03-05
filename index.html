@@ -794,7 +794,7 @@
     <div class="url-error" id="urlError"></div>
 
     <div class="property-card" id="propertyCard">
-      <img id="propImage" src="" alt="Property photo">
+      <img id="propImage" alt="Property photo">
       <div class="info">
         <h3 id="propAddress">--</h3>
         <div class="details" id="propDetails">--</div>
@@ -1485,14 +1485,15 @@
     // DSCR
     var dscr = (monthlyPI * 12 > 0) ? noi / (monthlyPI * 12) : null;
 
-    var totalCashClose = dpAmount + closingCostsVal + rehabVal + pointsCost;
+    var totalCashClose = totalCashInvested;
 
     // 1% Rule
     var onePercentPass = totalMonthlyIncome >= price * 0.01;
     var onePercentPct = price > 0 ? (totalMonthlyIncome / price) * 100 : 0;
 
-    // 50% Rule
-    var fiftyPctRatio = totalMonthlyIncome > 0 ? ((totalOpex * 12) / (totalMonthlyIncome * 12)) * 100 : 0;
+    // 50% Rule (operating expenses excluding vacancy, as % of gross rent)
+    var opexExVacancy = totalOpex - vacExp;
+    var fiftyPctRatio = totalMonthlyIncome > 0 ? (opexExVacancy / totalMonthlyIncome) * 100 : 0;
 
     // 70% Rule
     var seventyPctVal = arvVal > 0 ? ((price + rehabVal) / arvVal) * 100 : 0;
