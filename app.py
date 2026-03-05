@@ -319,13 +319,13 @@ async def scrape_zillow(request: Request):
             resp = await client.get(url, headers=HEADERS)
     except httpx.RequestError as exc:
         return JSONResponse(
-            {"error": f"Failed to fetch the Zillow page: {exc}"},
+            {"error": "Could not reach Zillow. Check your internet connection and try again."},
             status_code=502,
         )
 
     if resp.status_code == 403 or resp.status_code == 429:
         return JSONResponse(
-            {"error": "Zillow blocked the request (possible CAPTCHA or rate-limit). Please try again later."},
+            {"error": "Zillow may be blocking requests. Try again in a minute, or enter data manually."},
             status_code=503,
         )
 
@@ -400,7 +400,7 @@ async def analyze_ai(request: Request):
             )
     except (httpx.RequestError, httpx.TimeoutException) as exc:
         return JSONResponse(
-            {"error": f"Failed to reach Anthropic API: {exc}"},
+            {"error": "Could not reach AI service. Check your connection and try again."},
             status_code=502,
         )
 

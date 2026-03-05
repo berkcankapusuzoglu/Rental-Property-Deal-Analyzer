@@ -683,6 +683,32 @@
     .overview-grid, .detail-grid { grid-template-columns: 1fr; }
   }
 
+  /* ---- Connection Banner ---- */
+  .connection-banner {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    background: var(--red);
+    color: #fff;
+    text-align: center;
+    padding: 10px 16px;
+    font-size: 0.88rem;
+    font-weight: 600;
+    z-index: 1000;
+    transform: translateY(-100%);
+    transition: transform 0.3s ease;
+  }
+  .connection-banner.visible { transform: translateY(0); }
+
+  /* ---- Metric flash animation ---- */
+  @keyframes metricFlash {
+    0% { transform: scale(1); }
+    50% { transform: scale(1.08); color: var(--accent); }
+    100% { transform: scale(1); }
+  }
+  .metric-flash { animation: metricFlash 0.35s ease; }
+
   /* ---- Print Styles ---- */
   @media print {
     body { background: #fff; color: #000; }
@@ -690,7 +716,7 @@
     header h1 { color: #000; }
     header p { color: #555; }
     .wizard-nav, .step-buttons, .url-row, .url-error, .property-card,
-    .btn, .ai-section .btn, #aiBtn, .toggle-row, #downloadBtn { display: none !important; }
+    .btn, .ai-section .btn, #aiBtn, .toggle-row, #downloadBtn, .connection-banner { display: none !important; }
     .step-panel { display: none !important; }
     .step-panel[data-step="6"] { display: block !important; }
     .metric-card, .rule-card, .deal-score, .data-table, .equity-chart,
@@ -715,6 +741,7 @@
 </head>
 <body>
 
+<div class="connection-banner" id="connectionBanner">Unable to connect to the server. Make sure the app is running.</div>
 <div class="container">
   <header>
     <h1>Rental Property Deal Analyzer</h1>
@@ -1130,6 +1157,7 @@
   var maxVisitedStep = 1;
   var propertyType = 'sfh';
   var autoFilledFields = {}; // track fields filled from Zillow
+  var userEditedFields = {}; // track fields manually edited by user
   var lastCalcResults = {};
 
   // ======================================================================
@@ -1232,7 +1260,7 @@
   // Closing Costs default (3% of purchase price)
   // ======================================================================
   function updateClosingCostsDefault() {
-    if (!autoFilledFields['closingCosts']) {
+    if (!userEditedFields['closingCosts']) {
       var price = val($('purchasePrice'), 0);
       $('closingCosts').value = Math.round(price * 0.03);
     }
@@ -1240,7 +1268,7 @@
 
   // Insurance default (0.5% of purchase price)
   function updateInsuranceDefault() {
-    if (!autoFilledFields['insurance']) {
+    if (!userEditedFields['insurance']) {
       var price = val($('purchasePrice'), 0);
       $('insurance').value = Math.round(price * 0.005);
     }
@@ -1253,6 +1281,10 @@
     var url = $('zillowUrl').value.trim();
     if (!url) {
       showUrlError('Please enter a Zillow URL.');
+      return;
+    }
+    if (!/^https?:\/\//i.test(url) || url.toLowerCase().indexOf('zillow.com') === -1) {
+      showUrlError('Invalid URL. Please enter a valid Zillow listing URL (must start with http and contain zillow.com).');
       return;
     }
 
@@ -1278,11 +1310,13 @@
       if (data.price) {
         $('purchasePrice').value = data.price;
         autoFilledFields['purchasePrice'] = true;
-        // Update defaults based on new price
+        // Update defaults based on new price (reset user edit flags so auto-update keeps working)
         $('closingCosts').value = Math.round(data.price * 0.03);
         autoFilledFields['closingCosts'] = true;
+        userEditedFields['closingCosts'] = false;
         $('insurance').value = Math.round(data.price * 0.005);
         autoFilledFields['insurance'] = true;
+        userEditedFields['insurance'] = false;
       }
 
       if (data.rentZestimate) {
@@ -1327,7 +1361,12 @@
       updateDpHelper();
 
     } catch (err) {
-      showUrlError('Network error: ' + err.message);
+      if (err.message === 'Failed to fetch' || err.name === 'TypeError') {
+        showUrlError('Could not connect to the server. Make sure the app is running (python app.py) and try again.');
+        showConnectionBanner();
+      } else {
+        showUrlError('Zillow may be blocking requests. Try again in a minute, or enter data manually.');
+      }
     } finally {
       $('fetchBtn').disabled = false;
       $('fetchBtnText').textContent = 'Fetch Data';
@@ -1337,6 +1376,12 @@
   function showUrlError(msg) {
     $('urlError').textContent = msg;
     $('urlError').classList.add('visible');
+  }
+
+  function showConnectionBanner() {
+    var banner = $('connectionBanner');
+    banner.classList.add('visible');
+    setTimeout(function() { banner.classList.remove('visible'); }, 8000);
   }
 
   // ======================================================================
@@ -1575,9 +1620,9 @@
 
     // A) Overview
     setMetricColor('resMonthlyCF', fmtDollar(r.monthlyCF), r.monthlyCF);
-    $('resCoC').textContent = fmtPct(r.coc);
-    $('resCapRate').textContent = fmtPct(r.capRate);
-    $('res5yrROI').textContent = fmtPct(r.annualized5yrROI);
+    setMetricText('resCoC', fmtPct(r.coc));
+    setMetricText('resCapRate', fmtPct(r.capRate));
+    setMetricText('res5yrROI', fmtPct(r.annualized5yrROI));
 
     // B) Quick Rules
     $('rule1Badge').textContent = r.onePercentPass ? 'PASS' : 'FAIL';
@@ -1599,14 +1644,14 @@
     }
 
     // C) Detailed Metrics
-    $('resNOI').textContent = fmtDollar(r.noi);
-    $('resPI').textContent = fmtDollar(r.monthlyPI);
-    $('resPITI').textContent = fmtDollar(r.piti);
-    $('resTotalExp').textContent = fmtDollar(r.totalOpex);
-    $('resGRM').textContent = fmtGRM(r.grm);
-    $('resBreakeven').textContent = fmtPct(r.breakeven);
-    $('resDSCR').textContent = r.dscr !== null ? fmt(r.dscr) : 'N/A';
-    $('resCashClose').textContent = fmtDollar(r.totalCashClose);
+    setMetricText('resNOI', fmtDollar(r.noi));
+    setMetricText('resPI', fmtDollar(r.monthlyPI));
+    setMetricText('resPITI', fmtDollar(r.piti));
+    setMetricText('resTotalExp', fmtDollar(r.totalOpex));
+    setMetricText('resGRM', fmtGRM(r.grm));
+    setMetricText('resBreakeven', fmtPct(r.breakeven));
+    setMetricText('resDSCR', r.dscr !== null ? fmt(r.dscr) : 'N/A');
+    setMetricText('resCashClose', fmtDollar(r.totalCashClose));
 
     // D) Deal Score
     var ds = $('dealScore');
@@ -1663,8 +1708,24 @@
 
   function setMetricColor(id, text, value) {
     var el = $(id);
+    var changed = el.textContent !== text;
     el.textContent = text;
     el.className = 'value ' + (value >= 0 ? 'positive' : 'negative');
+    if (changed) flashMetric(el);
+  }
+
+  function setMetricText(id, text) {
+    var el = $(id);
+    if (el.textContent !== text) {
+      el.textContent = text;
+      flashMetric(el);
+    }
+  }
+
+  function flashMetric(el) {
+    el.classList.remove('metric-flash');
+    void el.offsetWidth; // force reflow to restart animation
+    el.classList.add('metric-flash');
   }
 
   // ======================================================================
@@ -1843,7 +1904,14 @@
       $('aiOutput').textContent = data.analysis || 'No response received.';
       $('aiOutput').classList.add('visible');
     } catch (err) {
-      $('aiError').textContent = 'Error: ' + err.message;
+      var aiMsg;
+      if (err.message === 'Failed to fetch' || err.name === 'TypeError') {
+        aiMsg = 'Could not reach AI service. Check your connection and try again.';
+        showConnectionBanner();
+      } else {
+        aiMsg = err.message || 'Failed to get AI analysis. Please try again.';
+      }
+      $('aiError').textContent = aiMsg;
       $('aiError').classList.add('visible');
     } finally {
       $('aiBtn').disabled = false;
@@ -1864,15 +1932,22 @@
     if (inp.type === 'number') {
       inp.addEventListener('blur', function() {
         var v = parseFloat(inp.value);
-        if (isNaN(v)) { inp.value = inp.min || 0; }
         var min = inp.min !== '' ? parseFloat(inp.min) : undefined;
         var max = inp.max !== '' ? parseFloat(inp.max) : undefined;
-        if (min !== undefined && !isNaN(min) && v < min) inp.value = min;
-        if (max !== undefined && !isNaN(max) && v > max) inp.value = max;
+        if (isNaN(v)) {
+          inp.value = (min !== undefined && !isNaN(min)) ? min : 0;
+        } else {
+          if (min !== undefined && !isNaN(min) && v < min) inp.value = min;
+          if (max !== undefined && !isNaN(max) && v > max) inp.value = max;
+        }
         calculate();
       });
     }
   });
+
+  // Track user manual edits on closing costs and insurance
+  $('closingCosts').addEventListener('input', function() { userEditedFields['closingCosts'] = true; });
+  $('insurance').addEventListener('input', function() { userEditedFields['insurance'] = true; });
 
   // Purchase price changes update closing costs and insurance defaults
   $('purchasePrice').addEventListener('input', function() {
