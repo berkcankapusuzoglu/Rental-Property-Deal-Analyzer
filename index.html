@@ -235,6 +235,26 @@
   .property-card .info h3 { font-size: 1rem; margin-bottom: 6px; }
   .property-card .info .details { font-size: 0.85rem; color: var(--text-muted); line-height: 1.8; }
 
+  /* Property summary in results */
+  .property-summary {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 20px;
+    margin-bottom: 28px;
+  }
+  .prop-summary-content { display: flex; gap: 20px; align-items: center; }
+  .prop-summary-img { width: 160px; height: 110px; object-fit: cover; border-radius: 8px; flex-shrink: 0; }
+  .prop-summary-info { flex: 1; }
+  .prop-summary-info h2 { font-size: 1.15rem; font-weight: 700; margin-bottom: 4px; }
+  .prop-summary-details { font-size: 0.85rem; color: var(--text-muted); margin-bottom: 6px; }
+  .prop-summary-price { font-size: 1.3rem; font-weight: 700; color: var(--accent); }
+
+  @media (max-width: 600px) {
+    .prop-summary-content { flex-direction: column; text-align: center; }
+    .prop-summary-img { width: 100%; height: 160px; }
+  }
+
   /* Toggle switch */
   .toggle-row {
     display: flex;
@@ -742,8 +762,13 @@
     .data-table td { color: #000; }
     .data-table tfoot td { background: #eee; }
     .table-wrap { max-height: none; overflow: visible; }
+    .amort-scroll { max-height: none; overflow: visible; }
     .ai-output { background: #f9f9f9; border: 1px solid #ccc; color: #000; }
     .section-title { color: #000; border-bottom-color: #ccc; }
+    .property-summary { background: #f9f9f9; border: 1px solid #ccc; }
+    .prop-summary-info h2 { color: #000; }
+    .prop-summary-details { color: #555; }
+    .prop-summary-price { color: #333; }
   }
 </style>
 </head>
@@ -1017,6 +1042,18 @@
   <!-- ============ STEP 6: Results Dashboard ============ -->
   <div class="step-panel" data-step="6" id="step6">
 
+    <!-- Property Summary (shown if data available) -->
+    <div class="property-summary" id="resultsPropSummary" style="display:none;">
+      <div class="prop-summary-content">
+        <img id="resultsPropImg" alt="" class="prop-summary-img">
+        <div class="prop-summary-info">
+          <h2 id="resultsPropAddr">--</h2>
+          <div class="prop-summary-details" id="resultsPropDetails">--</div>
+          <div class="prop-summary-price" id="resultsPropPrice">--</div>
+        </div>
+      </div>
+    </div>
+
     <!-- A) Overview Cards -->
     <div class="section-title">Overview</div>
     <div class="overview-grid" id="overviewGrid">
@@ -1169,6 +1206,7 @@
   var autoFilledFields = {}; // track fields filled from Zillow
   var userEditedFields = {}; // track fields manually edited by user
   var lastCalcResults = {};
+  window.scrapedData = null; // store fetched Zillow data for results display
 
   // ======================================================================
   // Wizard Navigation
@@ -1315,6 +1353,9 @@
         showUrlError(data.error || 'Failed to fetch property data.');
         return;
       }
+
+      // Store scraped data for results display
+      scrapedData = data;
 
       // Auto-fill fields
       if (data.price) {
@@ -1629,6 +1670,33 @@
   function renderResults() {
     var r = lastCalcResults;
 
+    // Property Summary
+    var summaryEl = $('resultsPropSummary');
+    var addr = scrapedData && scrapedData.address ? scrapedData.address : null;
+    // Build details line from inputs if no scraped data
+    var price = r.price;
+    if (addr || price) {
+      $('resultsPropAddr').textContent = addr || 'Manual Entry';
+      var dets = [];
+      if (scrapedData && scrapedData.beds) dets.push(scrapedData.beds + ' bed');
+      if (scrapedData && scrapedData.baths) dets.push(scrapedData.baths + ' bath');
+      if (scrapedData && scrapedData.sqft) dets.push(fmtInt(scrapedData.sqft) + ' sqft');
+      if (scrapedData && scrapedData.yearBuilt) dets.push('Built ' + scrapedData.yearBuilt);
+      if (scrapedData && scrapedData.propertyType) dets.push(scrapedData.propertyType);
+      $('resultsPropDetails').textContent = dets.length ? dets.join(' | ') : (r.propertyType === 'sfh' ? 'Single Family' : 'Multifamily');
+      $('resultsPropPrice').textContent = fmtDollar(price);
+      var img = $('resultsPropImg');
+      if (scrapedData && scrapedData.imageUrl) {
+        img.src = scrapedData.imageUrl;
+        img.style.display = '';
+      } else {
+        img.style.display = 'none';
+      }
+      summaryEl.style.display = '';
+    } else {
+      summaryEl.style.display = 'none';
+    }
+
     // A) Overview
     setMetricColor('resMonthlyCF', fmtDollar(r.monthlyCF), r.monthlyCF);
     setMetricColor('resCoC', fmtPct(r.coc), r.coc);
@@ -1913,7 +1981,14 @@
         throw new Error(data.error || 'Failed to get AI analysis.');
       }
 
-      $('aiOutput').textContent = data.analysis || 'No response received.';
+      var raw = data.analysis || 'No response received.';
+      // Simple markdown rendering: bold, line breaks, list items
+      var html = raw
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+        .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+        .replace(/^\d+\.\s+/gm, function(m) { return '<br>' + m; })
+        .replace(/\n/g, '<br>');
+      $('aiOutput').innerHTML = html;
       $('aiOutput').classList.add('visible');
     } catch (err) {
       var aiMsg;

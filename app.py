@@ -315,6 +315,30 @@ def _extract_from_ld_json(soup):
 
 
 # ---------------------------------------------------------------------------
+# Playwright fallback fetcher
+# ---------------------------------------------------------------------------
+
+async def _fetch_with_playwright(url: str) -> str:
+    """Use a headless browser to fetch the page (bypasses bot detection)."""
+    import asyncio
+    from playwright.async_api import async_playwright
+
+    async with async_playwright() as p:
+        browser = await p.chromium.launch(headless=True)
+        context = await browser.new_context(
+            user_agent=HEADERS["User-Agent"],
+            viewport={"width": 1280, "height": 900},
+        )
+        page = await context.new_page()
+        await page.goto(url, wait_until="domcontentloaded", timeout=30000)
+        # Wait a moment for JS to populate __NEXT_DATA__
+        await page.wait_for_timeout(2000)
+        html = await page.content()
+        await browser.close()
+    return html
+
+
+# ---------------------------------------------------------------------------
 # Routes
 # ---------------------------------------------------------------------------
 
@@ -339,33 +363,39 @@ async def scrape_zillow(request: Request):
             status_code=400,
         )
 
-    # --- Fetch page ---
+    # --- Fetch page (try httpx first, fallback to Playwright) ---
+    html_text = None
+
+    # Attempt 1: httpx (fast, but often blocked)
     try:
         async with httpx.AsyncClient(follow_redirects=True, timeout=20) as client:
             resp = await client.get(url, headers=HEADERS)
-    except httpx.RequestError as exc:
+        if resp.status_code < 400 and "captcha" not in resp.text[:2000].lower():
+            html_text = resp.text
+    except httpx.RequestError:
+        pass
+
+    # Attempt 2: Playwright headless browser (slower, but bypasses blocks)
+    if html_text is None:
+        try:
+            html_text = await _fetch_with_playwright(url)
+        except Exception as exc:
+            return JSONResponse(
+                {"error": f"Could not fetch the Zillow page. Both direct and browser methods failed. Try again later or enter data manually."},
+                status_code=503,
+            )
+
+    if not html_text:
         return JSONResponse(
             {"error": "Could not reach Zillow. Check your internet connection and try again."},
             status_code=502,
         )
 
-    if resp.status_code == 403 or resp.status_code == 429:
-        return JSONResponse(
-            {"error": "Zillow may be blocking requests. Try again in a minute, or enter data manually."},
-            status_code=503,
-        )
-
-    if resp.status_code >= 400:
-        return JSONResponse(
-            {"error": f"Zillow returned HTTP {resp.status_code}. The listing may no longer exist."},
-            status_code=502,
-        )
-
     # --- Parse HTML ---
-    soup = BeautifulSoup(resp.text, "lxml")
+    soup = BeautifulSoup(html_text, "lxml")
 
     # Check for CAPTCHA page
-    if soup.find("div", class_="captcha-container") or "captcha" in resp.text[:2000].lower():
+    if soup.find("div", class_="captcha-container") or "captcha" in html_text[:2000].lower():
         return JSONResponse(
             {"error": "Zillow returned a CAPTCHA page. Please try again later or use a different network."},
             status_code=503,
@@ -386,15 +416,61 @@ async def scrape_zillow(request: Request):
     )
 
 
+AI_SYSTEM_PROMPT = (
+    "You are a real estate investment analyst. Analyze this rental "
+    "property deal and provide a plain-English investment summary "
+    "with: 1) Overall Assessment, 2) Key Strengths, 3) Key Risks, "
+    "4) Recommendation. Be concise but thorough."
+)
+
+
+async def _analyze_with_ollama(metrics: str) -> str:
+    """Call local Ollama API."""
+    ollama_url = os.getenv("OLLAMA_URL", "http://localhost:11434")
+    ollama_model = os.getenv("OLLAMA_MODEL", "llama3.2:3b")
+    async with httpx.AsyncClient(timeout=120) as client:
+        resp = await client.post(
+            f"{ollama_url}/api/chat",
+            json={
+                "model": ollama_model,
+                "messages": [
+                    {"role": "system", "content": AI_SYSTEM_PROMPT},
+                    {"role": "user", "content": metrics},
+                ],
+                "stream": False,
+            },
+        )
+    if resp.status_code != 200:
+        raise Exception(f"Ollama error: {resp.status_code} - {resp.text[:200]}")
+    data = resp.json()
+    return data["message"]["content"]
+
+
+async def _analyze_with_anthropic(metrics: str, api_key: str) -> str:
+    """Call Anthropic Claude API."""
+    async with httpx.AsyncClient(timeout=30) as client:
+        resp = await client.post(
+            "https://api.anthropic.com/v1/messages",
+            headers={
+                "x-api-key": api_key,
+                "anthropic-version": "2023-06-01",
+                "Content-Type": "application/json",
+            },
+            json={
+                "model": "claude-sonnet-4-20250514",
+                "max_tokens": 1024,
+                "system": AI_SYSTEM_PROMPT,
+                "messages": [{"role": "user", "content": metrics}],
+            },
+        )
+    if resp.status_code != 200:
+        raise Exception(f"Anthropic API error (HTTP {resp.status_code}): {resp.text[:200]}")
+    data = resp.json()
+    return data["content"][0]["text"]
+
+
 @app.post("/api/analyze-ai")
 async def analyze_ai(request: Request):
-    api_key = os.getenv("ANTHROPIC_API_KEY")
-    if not api_key:
-        return JSONResponse(
-            {"error": "ANTHROPIC_API_KEY not set in .env file"},
-            status_code=400,
-        )
-
     body = await request.json()
     metrics = body.get("metrics", "")
     if not metrics:
@@ -403,48 +479,43 @@ async def analyze_ai(request: Request):
             status_code=400,
         )
 
+    # Determine AI provider: Anthropic (paid) or Ollama (free/local)
+    api_key = os.getenv("ANTHROPIC_API_KEY")
+    use_ollama = os.getenv("AI_PROVIDER", "auto").lower()
+
+    # Auto-detect: use Anthropic if key is set, otherwise try Ollama
+    if use_ollama == "ollama" or (use_ollama == "auto" and not api_key):
+        try:
+            text = await _analyze_with_ollama(metrics)
+            return JSONResponse({"analysis": text, "provider": "ollama"})
+        except Exception as exc:
+            if api_key:
+                pass  # fall through to Anthropic
+            else:
+                return JSONResponse(
+                    {"error": f"Ollama is not running or model not available. Start Ollama with: ollama serve\nThen pull a model: ollama pull llama3.2:3b\n\nError: {exc}"},
+                    status_code=502,
+                )
+
+    if not api_key:
+        return JSONResponse(
+            {"error": "No AI provider configured. Either:\n1) Set ANTHROPIC_API_KEY in .env (paid)\n2) Run Ollama locally (free): ollama serve && ollama pull llama3.2:3b"},
+            status_code=400,
+        )
+
     try:
-        async with httpx.AsyncClient(timeout=30) as client:
-            resp = await client.post(
-                "https://api.anthropic.com/v1/messages",
-                headers={
-                    "x-api-key": api_key,
-                    "anthropic-version": "2023-06-01",
-                    "Content-Type": "application/json",
-                },
-                json={
-                    "model": "claude-sonnet-4-20250514",
-                    "max_tokens": 1024,
-                    "system": (
-                        "You are a real estate investment analyst. Analyze this rental "
-                        "property deal and provide a plain-English investment summary "
-                        "with: 1) Overall Assessment, 2) Key Strengths, 3) Key Risks, "
-                        "4) Recommendation. Be concise but thorough."
-                    ),
-                    "messages": [{"role": "user", "content": metrics}],
-                },
-            )
-    except (httpx.RequestError, httpx.TimeoutException) as exc:
+        text = await _analyze_with_anthropic(metrics, api_key)
+        return JSONResponse({"analysis": text, "provider": "anthropic"})
+    except (httpx.RequestError, httpx.TimeoutException):
         return JSONResponse(
             {"error": "Could not reach AI service. Check your connection and try again."},
             status_code=502,
         )
-
-    if resp.status_code != 200:
+    except Exception as exc:
         return JSONResponse(
-            {"error": f"Anthropic API error (HTTP {resp.status_code}): {resp.text}"},
+            {"error": str(exc)},
             status_code=502,
         )
-
-    try:
-        data = resp.json()
-        text = data["content"][0]["text"]
-    except (KeyError, IndexError, ValueError):
-        return JSONResponse(
-            {"error": "Unexpected response from AI service."},
-            status_code=502,
-        )
-    return JSONResponse({"analysis": text})
 
 
 def open_browser():
