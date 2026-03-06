@@ -109,6 +109,25 @@ Full financial dashboard with all metrics, a 5-year projection, amortization sch
 | **DSCR (Debt Service Coverage Ratio)** | NOI divided by annual mortgage payments. Tells you if the property's income covers its debt. Banks typically require 1.25+. Below 1.0 means you're losing money. | > 1.25 |
 | **GRM (Gross Rent Multiplier)** | Purchase price divided by annual rent. Lower = better. It's a quick-and-dirty comparison tool — how many years of gross rent to pay off the price. | < 12-15 |
 | **Break-Even Occupancy** | The percentage of time the property must be occupied just to cover all expenses + mortgage. Over 85% is risky — too little margin for vacancies. | < 85% |
+| **OER (Operating Expense Ratio)** | Total operating expenses as a percentage of gross rental income. Measures expense efficiency. | < 50% |
+| **Price / Sqft** | Purchase price divided by square footage. Useful for comparing deals in the same market. | Market-dependent |
+| **Rent / Sqft** | Monthly rent divided by square footage. Higher = more efficient income per sqft. | Market-dependent |
+| **Cash Flow / Unit** | Monthly cash flow divided by number of units. The classic BiggerPockets metric for multifamily. | > $200/unit |
+| **Annual Depreciation** | Building value (price x building %) spread over 27.5 years (IRS residential schedule). A non-cash expense that reduces taxable income. | Informational |
+| **After-Tax Cash Flow** | Annual cash flow + annual tax savings from depreciation. Shows your real take-home return. | Positive |
+
+### Total Return — The Four Pillars
+
+Real estate returns come from four sources. The app calculates all four over a 5-year projection:
+
+| Pillar | What It Is |
+|---|---|
+| **Cash Flow** | Net rental income after all expenses and mortgage payments |
+| **Appreciation** | Property value growth over time (based on your growth rate input) |
+| **Debt Paydown** | The principal portion of mortgage payments — your tenants are paying down your loan |
+| **Tax Benefits** | Annual depreciation deduction x your marginal tax rate = tax savings |
+
+The **5-Year Total Return** is the sum of all four pillars. This gives a much more complete picture than cash flow alone.
 
 ### Rule-of-Thumb Checks
 
@@ -118,13 +137,43 @@ Full financial dashboard with all metrics, a 5-year projection, amortization sch
 | **50% Rule** | Operating expenses (excluding mortgage) typically run about 50% of gross rent. If yours are much higher, expenses may eat your cash flow. | Reality check on your expense estimates. |
 | **70% Rule** | Purchase price + rehab should be <= 70% of ARV. Only shown when ARV or rehab is entered. Used for flips and BRRRR deals. | Checks if you're paying too much relative to the improved value. |
 
-### Deal Score
+### Deal Score (Point-Based Scorecard)
 
-The app gives an overall verdict based on combined metrics:
+The app scores each deal on a point system across 7 key metrics:
 
-- **Great Deal**: CoC >= 8%, Cap Rate >= 6%, and DSCR >= 1.25
-- **Borderline Deal**: CoC >= 4% or Cap Rate >= 4%, but doesn't hit all thresholds
-- **Pass on This Deal**: Both CoC and Cap Rate below minimum thresholds
+| Metric | 2 pts (Strong) | 1 pt (OK) | 0 pts (Weak) |
+|---|---|---|---|
+| CoC Return | >= 8% | >= 4% | < 4% |
+| Cap Rate | >= 6% | >= 4% | < 4% |
+| DSCR (skip if cash) | >= 1.25 | >= 1.0 | < 1.0 |
+| CF per Unit/mo | >= $200 | >= $100 | < $100 |
+| Break-even Occ. | <= 75% | <= 85% | > 85% |
+| 1% Rule | pass (2pts) | -- | fail (0pts) |
+| 50% Rule | pass (2pts) | -- | fail (0pts) |
+
+**Max: 14 points** (12 if cash purchase, since DSCR is skipped). Verdict thresholds:
+- **Great Deal**: >= 75% of max points
+- **Borderline Deal**: >= 45% of max points
+- **Pass on This Deal**: < 45% of max points
+
+Each factor shows a colored indicator (green/yellow/red) with a one-line explanation of why it scored that way.
+
+### Investment Strategy Guide
+
+| Strategy | Key Metrics | What Makes a Good Deal |
+|---|---|---|
+| **Cash Flow** | CoC >= 8%, CF/unit >= $200, DSCR >= 1.25 | High rents relative to price, low expenses |
+| **Wealth Building** | 5yr Total Return, appreciation, equity growth | Growing markets, value-add potential |
+| **Low Risk** | Break-even < 75%, DSCR >= 1.5, 50% rule pass | Conservative margins, strong coverage |
+| **BRRRR** | 70% rule pass, ARV spread | Below-market purchase + forced appreciation |
+
+### Which Metrics Matter Most?
+
+1. **Cash flow first** — If monthly cash flow is negative, the deal doesn't work regardless of other metrics
+2. **DSCR second** — Must be above 1.0 or you can't service the debt
+3. **Break-even occupancy** — Your safety margin against vacancies
+4. **CoC return** — The return on YOUR invested capital
+5. **Total return** — The full picture including appreciation, debt paydown, and tax benefits
 
 ### 5-Year Projection
 
@@ -145,6 +194,143 @@ Click "Run AI Analysis" to get a plain-English assessment from a local LLM (Olla
 2. Key strengths
 3. Key risks
 4. Buy/pass recommendation
+
+## Assumptions & Defaults
+
+The calculator makes the following assumptions. Understanding these helps you interpret results accurately.
+
+| Assumption | Default Value | Why |
+|---|---|---|
+| **Building value %** | 80% of purchase price | IRS requires splitting land vs building for depreciation. 80/20 is standard for residential; condos may be 90/10, rural land-heavy properties 60/40. |
+| **Depreciation schedule** | 27.5 years (straight-line) | IRS mandated schedule for residential rental property. Commercial is 39 years. |
+| **Marginal tax rate** | 25% | Used to calculate tax savings from depreciation. Adjust to your actual bracket (22-37% for most investors). |
+| **Vacancy rate** | 8% of gross rent | National average is 5-8%. Adjust for your local market — urban areas may be lower, rural higher. |
+| **Maintenance** | 5% of gross rent | Rule of thumb for ongoing repairs. Older properties (pre-1980) may need 8-10%. |
+| **CapEx reserve** | 5% of gross rent | For major replacements (roof, HVAC, appliances). Some investors use 5-10%. |
+| **Management fee** | 10% of gross rent | Professional property management cost. Set to 0% if self-managing, but consider your time value. |
+| **Closing costs** | 3% of purchase price | Auto-calculated when price is entered. Actual costs vary by state (1-5%). |
+| **Insurance** | 0.5% of purchase price/yr | Auto-calculated. Actual costs depend on location, property type, and coverage level. |
+| **Property value growth** | 3%/yr | U.S. historical average is ~3-4%/yr. Hot markets may be higher, but don't count on it. |
+| **Income growth** | 2%/yr | Rent increases. Conservative estimate; actual depends on lease terms and local market. |
+| **Expense growth** | 2%/yr | Inflation on fixed costs (taxes, insurance, utilities). Roughly tracks CPI. |
+| **Loan terms** | 30yr fixed, 20% down, 7% rate | Standard conventional investment property loan (2024-2025 rates). |
+| **5-year projection** | Includes all 4 return pillars | Cash flow + appreciation + debt paydown + tax savings, compounded with growth rates. |
+
+**What the calculator does NOT account for:**
+- Closing costs when selling (typically 6-8% of sale price)
+- Capital gains tax on sale
+- Depreciation recapture tax (25% on accumulated depreciation when you sell)
+- Cost segregation or bonus depreciation (accelerated depreciation strategies)
+- Refinancing scenarios
+- Rent-ready costs between tenants (cleaning, painting, minor repairs)
+- Legal/accounting fees
+- Mortgage insurance (PMI) if down payment < 20%
+
+## Example Scenarios
+
+Three realistic scenarios to help you understand what good, mediocre, and bad deals look like. Use these as reference points when evaluating your own deals.
+
+### Good Deal — Cash Flow Rental in a Secondary Market
+
+A well-priced single family home in a secondary market (e.g., Midwest or Southeast) with strong rent-to-price ratio.
+
+| Input | Value |
+|---|---|
+| Property | 456 Oak Avenue, Arlington VA 22201 |
+| Purchase Price | $250,000 |
+| ARV | $300,000 |
+| Closing Costs | $7,500 |
+| Rehab Budget | $15,000 |
+| Sqft | 1,800 |
+| Value Growth | 3%/yr |
+| Down Payment | 20% |
+| Interest Rate | 6.5% |
+| Loan Term | 30 years |
+| Monthly Rent | $2,800 |
+| Other Income | $100/mo |
+| Income Growth | 2%/yr |
+| Property Taxes | $3,000/yr |
+| Insurance | $1,500/yr |
+| Maintenance | 5% |
+| Vacancy | 5% |
+| CapEx | 5% |
+| Management | 8% |
+| Expense Growth | 2%/yr |
+
+**Key Results:**
+- Monthly Cash Flow: **$593** | CoC Return: **9.83%** | Cap Rate: **8.92%**
+- DSCR: **1.47** | Break-even Occupancy: **74.52%**
+- 5-Year Total Return: **$104,189** (143.71% on $72,500 invested)
+- Deal Score: **14/14 — Great Deal**
+- Strategy Fit: Cash Flow (Strong), Wealth Building (Strong), Low Risk (Moderate)
+
+### Mediocre Deal — Suburban Property with Thin Margins
+
+A typical suburban property where appreciation is the main play. Cash flow is thin but positive.
+
+| Input | Value |
+|---|---|
+| Property | 220 Maple Dr, Fairfax VA 22030 |
+| Purchase Price | $380,000 |
+| Closing Costs | $11,400 |
+| Rehab Budget | $0 |
+| Sqft | 1,500 |
+| Value Growth | 3%/yr |
+| Down Payment | 20% |
+| Interest Rate | 6.75% |
+| Loan Term | 30 years |
+| Monthly Rent | $2,400 |
+| Other Income | $0 |
+| Income Growth | 2%/yr |
+| Property Taxes | $4,500/yr |
+| Insurance | $1,900/yr |
+| Maintenance | 5% |
+| Vacancy | 5% |
+| CapEx | 5% |
+| Management | 8% |
+| Expense Growth | 2%/yr |
+
+**Key Results:**
+- Monthly Cash Flow: **~-$250** | CoC Return: **~-3.5%** | Cap Rate: **~4.7%**
+- DSCR: **~0.87** | Break-even Occupancy: **~100%**
+- 5-Year Total Return: Positive (appreciation + debt paydown offset negative CF)
+- Deal Score: **~4-5/14 — Borderline Deal**
+- Strategy Fit: Cash Flow (Poor), Wealth Building (Moderate), Low Risk (Poor)
+
+### Bad Deal — Overpriced Property with Negative Cash Flow
+
+An expensive property in a high-cost area where rent doesn't remotely cover costs.
+
+| Input | Value |
+|---|---|
+| Property | 789 Expensive Blvd, McLean VA 22101 |
+| Purchase Price | $500,000 |
+| Closing Costs | $15,000 |
+| Rehab Budget | $0 |
+| Sqft | 1,200 |
+| Value Growth | 3%/yr |
+| Down Payment | 20% |
+| Interest Rate | 7.5% |
+| Loan Term | 30 years |
+| Monthly Rent | $2,000 |
+| Other Income | $0 |
+| Income Growth | 2%/yr |
+| Property Taxes | $3,000/yr |
+| Insurance | $1,000/yr |
+| Maintenance | 5% |
+| Vacancy | 8% |
+| CapEx | 5% |
+| Management | 10% |
+| Expense Growth | 2%/yr |
+
+**Key Results:**
+- Monthly Cash Flow: **~-$1,690** | CoC Return: **~-17.6%** | Cap Rate: **~2.7%**
+- DSCR: **~0.40** | Break-even Occupancy: **~176%** (impossible)
+- 5-Year Total Return: $22,029 (only from appreciation + debt paydown, CF deeply negative)
+- Deal Score: **2/14 — Pass on This Deal**
+- Strategy Fit: Cash Flow (Poor), Wealth Building (Poor), Low Risk (Poor)
+
+**Why it's bad:** The rent ($2,000/mo) is only 0.4% of the purchase price — far below the 1% rule. The mortgage alone ($2,797/mo) exceeds rent. You'd be losing $1,690/month out of pocket. Even with appreciation and tax benefits, the negative cash flow makes this unsustainable.
 
 ## Zillow Scraping
 

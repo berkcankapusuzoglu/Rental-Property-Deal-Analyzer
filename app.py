@@ -428,14 +428,20 @@ async def _analyze_with_ollama(metrics: str) -> str:
     """Call local Ollama API."""
     ollama_url = os.getenv("OLLAMA_URL", "http://localhost:11434")
     ollama_model = os.getenv("OLLAMA_MODEL", "llama3.2:3b")
-    async with httpx.AsyncClient(timeout=120) as client:
+    # For thinking models (qwen3, deepseek-r1), prepend /no_think to the
+    # user message to disable internal reasoning and speed up inference,
+    # especially important on CPU-only setups.
+    user_content = metrics
+    if any(t in ollama_model.lower() for t in ("qwen3", "deepseek-r1")):
+        user_content = "/no_think\n" + metrics
+    async with httpx.AsyncClient(timeout=300) as client:
         resp = await client.post(
             f"{ollama_url}/api/chat",
             json={
                 "model": ollama_model,
                 "messages": [
                     {"role": "system", "content": AI_SYSTEM_PROMPT},
-                    {"role": "user", "content": metrics},
+                    {"role": "user", "content": user_content},
                 ],
                 "stream": False,
             },
@@ -493,13 +499,13 @@ async def analyze_ai(request: Request):
                 pass  # fall through to Anthropic
             else:
                 return JSONResponse(
-                    {"error": f"Ollama is not running or model not available. Start Ollama with: ollama serve\nThen pull a model: ollama pull llama3.2:3b\n\nError: {exc}"},
+                    {"error": f"Ollama is not running or model not available. Start Ollama with: ollama serve\nThen pull a model: ollama pull {os.getenv('OLLAMA_MODEL', 'llama3.2:3b')}\n\nError: {exc}"},
                     status_code=502,
                 )
 
     if not api_key:
         return JSONResponse(
-            {"error": "No AI provider configured. Either:\n1) Set ANTHROPIC_API_KEY in .env (paid)\n2) Run Ollama locally (free): ollama serve && ollama pull llama3.2:3b"},
+            {"error": f"No AI provider configured. Either:\n1) Set ANTHROPIC_API_KEY in .env (paid)\n2) Run Ollama locally (free): ollama serve && ollama pull {os.getenv('OLLAMA_MODEL', 'llama3.2:3b')}"},
             status_code=400,
         )
 
