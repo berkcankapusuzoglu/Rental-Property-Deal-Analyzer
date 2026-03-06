@@ -214,14 +214,38 @@ def _extract_from_next_data(soup):
     if prop and isinstance(prop, dict) and (prop.get("address") or prop.get("price")):
         return _build_result(prop)
 
-    # Strategy D: componentProps
+    # Strategy D: componentProps (may contain its own gdpClientCache)
     comp_props = _safe_get(next_data, "props", "pageProps", "componentProps")
     if comp_props and isinstance(comp_props, dict):
+        # D1: direct property on componentProps values
         for _key, value in comp_props.items():
             if isinstance(value, dict):
                 prop = value.get("property")
                 if prop and isinstance(prop, dict):
                     return _build_result(prop)
+
+        # D2: gdpClientCache nested inside componentProps
+        gdp_nested = comp_props.get("gdpClientCache")
+        if gdp_nested:
+            if isinstance(gdp_nested, str):
+                try:
+                    gdp_nested = json.loads(gdp_nested)
+                except json.JSONDecodeError:
+                    gdp_nested = {}
+            if isinstance(gdp_nested, dict):
+                for _key, value in gdp_nested.items():
+                    parsed = value
+                    if isinstance(value, str):
+                        try:
+                            parsed = json.loads(value)
+                        except json.JSONDecodeError:
+                            continue
+                    if isinstance(parsed, dict):
+                        prop = parsed.get("property")
+                        if not prop:
+                            prop = _safe_get(parsed, "data", "property")
+                        if prop and isinstance(prop, dict):
+                            return _build_result(prop)
 
     return None
 
