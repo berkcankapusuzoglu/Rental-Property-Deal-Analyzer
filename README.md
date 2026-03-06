@@ -20,9 +20,9 @@ Free, open-source rental property investment calculator with AI-powered analysis
 <br>
 
 <div align="center">
-  <img src="examples/screenshot.png" alt="Rental Property Deal Analyzer — Results Dashboard" width="900">
+  <img src="examples/demo.gif" alt="Rental Property Deal Analyzer — Demo" width="900">
   <br>
-  <em>Full investment analysis in seconds — from purchase price to 5-year return</em>
+  <em>One click from empty form to full investment analysis</em>
 </div>
 
 <br>
@@ -240,7 +240,7 @@ Your support helps keep this project free and actively maintained.
 
 ## Contributing
 
-Contributions are welcome! Feel free to open issues or submit pull requests.
+See [CONTRIBUTING.md](CONTRIBUTING.md) for how to run locally and submit PRs.
 
 ## License
 

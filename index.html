@@ -4,6 +4,19 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Rental Property Deal Analyzer</title>
+<meta name="description" content="Free rental property investment calculator. Analyze deals with 20+ metrics, AI-powered insights, deal scoring, and 5-year return projections. No signup required.">
+<meta name="keywords" content="rental property calculator, investment property analyzer, cash on cash return, cap rate calculator, real estate deal analysis, DSCR calculator">
+<meta name="author" content="Berk Can Kapusuzoglu">
+<meta property="og:title" content="Rental Property Deal Analyzer">
+<meta property="og:description" content="Free rental property investment calculator with 20+ metrics, AI analysis, deal scoring, and 5-year projections.">
+<meta property="og:image" content="https://raw.githubusercontent.com/berkcankapusuzoglu/Rental-Property-Deal-Analyzer/main/examples/social-preview.png">
+<meta property="og:url" content="https://rental-property-deal-analyzer.onrender.com">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Rental Property Deal Analyzer">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Rental Property Deal Analyzer">
+<meta name="twitter:description" content="Free rental property investment calculator with 20+ metrics, AI analysis, deal scoring, and 5-year projections.">
+<meta name="twitter:image" content="https://raw.githubusercontent.com/berkcankapusuzoglu/Rental-Property-Deal-Analyzer/main/examples/social-preview.png">
 <style>
   :root {
     --bg: #0f1117;
@@ -1103,7 +1116,7 @@
     </div>
 
     <div class="step-buttons">
-      <div class="left"></div>
+      <div class="left"><button class="btn btn-secondary" type="button" onclick="tryExampleDeal()">&#9733; Try Example Deal</button></div>
       <div class="right">
         <button class="btn" type="button" onclick="goToStep(2)">Next &rarr;</button>
       </div>
@@ -2812,6 +2825,25 @@
     updateInsuranceDefault();
     updateDpHelper();
   });
+
+  // === Try Example Deal ===
+  window.tryExampleDeal = function() {
+    var ex = {
+      propName:'456 Oak Avenue, Arlington VA 22201',
+      purchasePrice:'250000', arv:'300000', closingCosts:'7500',
+      rehabBudget:'15000', valueGrowth:'3', sqft:'1800',
+      buildingPct:'80', taxRate:'25',
+      downPayment:'20', interestRate:'6.5', loanTerm:'30', points:'0',
+      monthlyRent:'2800', otherIncome:'100', incomeGrowth:'2',
+      propertyTaxes:'3000', insurance:'1500', maintenance:'5',
+      vacancy:'5', capex:'5', management:'8',
+      hoa:'0', utilities:'0', otherExpenses:'0', expenseGrowth:'2'
+    };
+    Object.keys(ex).forEach(function(k){ var el=$(k); if(el) el.value=ex[k]; });
+    if($('cashPurchase')){ $('cashPurchase').checked=false; toggleCashPurchase(); }
+    updateDpHelper();
+    goToStep(6);
+  };
 
   // Initial setup
   updateDpHelper();
