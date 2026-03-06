@@ -452,6 +452,32 @@ async def _analyze_with_ollama(metrics: str) -> str:
     return data["message"]["content"]
 
 
+async def _analyze_with_lmstudio(metrics: str) -> str:
+    """Call LM Studio's OpenAI-compatible API."""
+    lmstudio_url = os.getenv("LMSTUDIO_URL", "http://localhost:1234")
+    lmstudio_model = os.getenv("LMSTUDIO_MODEL", "")  # empty = use whatever is loaded
+    async with httpx.AsyncClient(timeout=300) as client:
+        payload = {
+            "messages": [
+                {"role": "system", "content": AI_SYSTEM_PROMPT},
+                {"role": "user", "content": metrics},
+            ],
+            "temperature": 0.7,
+            "max_tokens": 1024,
+            "stream": False,
+        }
+        if lmstudio_model:
+            payload["model"] = lmstudio_model
+        resp = await client.post(
+            f"{lmstudio_url}/v1/chat/completions",
+            json=payload,
+        )
+    if resp.status_code != 200:
+        raise Exception(f"LM Studio error: {resp.status_code} - {resp.text[:200]}")
+    data = resp.json()
+    return data["choices"][0]["message"]["content"]
+
+
 async def _analyze_with_anthropic(metrics: str, api_key: str) -> str:
     """Call Anthropic Claude API."""
     async with httpx.AsyncClient(timeout=30) as client:
@@ -485,12 +511,23 @@ async def analyze_ai(request: Request):
             status_code=400,
         )
 
-    # Determine AI provider: Anthropic (paid) or Ollama (free/local)
+    # Determine AI provider
     api_key = os.getenv("ANTHROPIC_API_KEY")
-    use_ollama = os.getenv("AI_PROVIDER", "auto").lower()
+    provider = os.getenv("AI_PROVIDER", "auto").lower()
 
-    # Auto-detect: use Anthropic if key is set, otherwise try Ollama
-    if use_ollama == "ollama" or (use_ollama == "auto" and not api_key):
+    # LM Studio provider
+    if provider == "lmstudio":
+        try:
+            text = await _analyze_with_lmstudio(metrics)
+            return JSONResponse({"analysis": text, "provider": "lmstudio"})
+        except Exception as exc:
+            return JSONResponse(
+                {"error": f"LM Studio is not running. Start LM Studio and load a model, then enable the local server.\n\nError: {exc}"},
+                status_code=502,
+            )
+
+    # Ollama provider (explicit or auto-detected)
+    if provider == "ollama" or (provider == "auto" and not api_key):
         try:
             text = await _analyze_with_ollama(metrics)
             return JSONResponse({"analysis": text, "provider": "ollama"})
@@ -505,7 +542,7 @@ async def analyze_ai(request: Request):
 
     if not api_key:
         return JSONResponse(
-            {"error": f"No AI provider configured. Either:\n1) Set ANTHROPIC_API_KEY in .env (paid)\n2) Run Ollama locally (free): ollama serve && ollama pull {os.getenv('OLLAMA_MODEL', 'llama3.2:3b')}"},
+            {"error": f"No AI provider configured. Either:\n1) Set ANTHROPIC_API_KEY in .env (paid)\n2) Run LM Studio locally (free): set AI_PROVIDER=lmstudio\n3) Run Ollama locally (free): ollama serve && ollama pull {os.getenv('OLLAMA_MODEL', 'llama3.2:3b')}"},
             status_code=400,
         )
 
