@@ -819,6 +819,64 @@
   }
   .metric-flash { animation: metricFlash 0.35s ease; }
 
+  /* ---- Scenario Toolbar ---- */
+  .scenario-toolbar {
+    display: flex; align-items: center; gap: 8px; margin-bottom: 20px;
+    padding: 10px 14px; background: var(--surface); border-radius: var(--radius);
+    border: 1px solid var(--border); flex-wrap: wrap;
+  }
+  .scenario-toolbar select {
+    flex: 1; min-width: 180px; padding: 6px 10px; background: var(--card);
+    color: var(--text); border: 1px solid var(--border); border-radius: 6px; font-size: 0.85rem;
+  }
+  .btn-small { padding: 6px 12px !important; font-size: 0.8rem !important; min-width: auto !important; }
+  .btn-danger { background: var(--red) !important; }
+  .btn-danger:hover { background: #dc2626 !important; }
+  .scenario-count { font-size: 0.78rem; color: var(--text-muted); }
+
+  /* ---- AI Controls ---- */
+  .ai-controls { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 12px; }
+  .ai-controls select {
+    padding: 8px 12px; background: var(--card); color: var(--text);
+    border: 1px solid var(--border); border-radius: 6px; font-size: 0.85rem;
+    max-width: 300px; flex: 1;
+  }
+
+  /* ---- Compare Overlay ---- */
+  .compare-overlay {
+    display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(0,0,0,0.85); z-index: 2000; overflow-y: auto; padding: 20px;
+  }
+  .compare-overlay.visible { display: block; }
+  .compare-container {
+    max-width: 1200px; margin: 0 auto; background: var(--bg);
+    border-radius: var(--radius); padding: 24px; border: 1px solid var(--border);
+  }
+  .compare-header {
+    display: flex; justify-content: space-between; align-items: center;
+    margin-bottom: 20px; padding-bottom: 12px; border-bottom: 1px solid var(--border);
+  }
+  .compare-header h2 { font-size: 1.3rem; }
+  .compare-select-row {
+    display: flex; gap: 12px; align-items: end; flex-wrap: wrap; margin-bottom: 20px;
+  }
+  .compare-col { display: flex; flex-direction: column; gap: 4px; flex: 1; min-width: 150px; }
+  .compare-col label { font-size: 0.8rem; color: var(--text-muted); font-weight: 600; }
+  .compare-col select {
+    padding: 8px 10px; background: var(--card); color: var(--text);
+    border: 1px solid var(--border); border-radius: 6px; font-size: 0.85rem;
+  }
+  .compare-table {
+    width: 100%; border-collapse: collapse; font-size: 0.88rem;
+  }
+  .compare-table th, .compare-table td {
+    padding: 8px 12px; text-align: left; border-bottom: 1px solid var(--border);
+  }
+  .compare-table th { color: var(--text-muted); font-weight: 600; font-size: 0.78rem; text-transform: uppercase; }
+  .compare-table td:first-child { color: var(--text-muted); font-size: 0.82rem; }
+  .compare-best { color: var(--green) !important; font-weight: 700; }
+  .compare-worst { color: var(--red) !important; }
+
   /* ---- Print Styles ---- */
   @media print {
     * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
@@ -829,7 +887,8 @@
 
     /* Hide non-result elements */
     .wizard-nav, .step-buttons, .url-row, .url-error, .property-card,
-    .btn, .ai-section .btn, #aiBtn, .toggle-row, #downloadBtn, .connection-banner { display: none !important; }
+    .btn, .ai-section .btn, #aiBtn, .toggle-row, #downloadBtn, #downloadHtmlBtn,
+    .connection-banner, .scenario-toolbar, .ai-controls select, .compare-overlay { display: none !important; }
     .step-panel { display: none !important; }
     .step-panel[data-step="6"] { display: block !important; }
 
@@ -970,6 +1029,15 @@
       <div class="circle">6</div>
       <div class="step-label">Results</div>
     </div>
+  </div>
+
+  <!-- Scenario Save/Load Toolbar -->
+  <div class="scenario-toolbar" id="scenarioToolbar">
+    <select id="scenarioSelect"><option value="">— Saved Scenarios —</option></select>
+    <button class="btn btn-small" type="button" onclick="loadScenario()">Load</button>
+    <button class="btn btn-small" type="button" onclick="saveScenario()">Save Current</button>
+    <button class="btn btn-small btn-danger" type="button" onclick="deleteScenario()">Delete</button>
+    <span class="scenario-count" id="scenarioCount"></span>
   </div>
 
   <!-- ============ STEP 1: Property URL & Purchase ============ -->
@@ -1347,26 +1415,58 @@
     <!-- H) AI Analysis -->
     <div class="ai-section">
       <div class="section-title">AI Investment Analysis</div>
-      <button class="btn" id="aiBtn" type="button" onclick="runAI()">
-        <span id="aiBtnText">Run AI Analysis</span>
-      </button>
+      <div class="ai-controls">
+        <select id="aiModelSelect" title="Choose AI model"><option value="">Loading models...</option></select>
+        <button class="btn" id="aiBtn" type="button" onclick="runAI()">
+          <span id="aiBtnText">Run AI Analysis</span>
+        </button>
+      </div>
       <div class="ai-error" id="aiError"></div>
       <div class="ai-output" id="aiOutput"></div>
     </div>
 
     <!-- I) Download Report -->
-    <div style="text-align:center; margin-top:20px;">
-      <button class="btn btn-secondary btn-large" id="downloadBtn" type="button" onclick="window.print()">Download Report</button>
+    <div style="text-align:center; margin-top:20px; display:flex; gap:12px; justify-content:center; flex-wrap:wrap;">
+      <button class="btn btn-secondary btn-large" id="downloadBtn" type="button" onclick="window.print()">Download PDF</button>
+      <button class="btn btn-secondary btn-large" id="downloadHtmlBtn" type="button" onclick="downloadHTML()">Download HTML</button>
     </div>
 
     <div class="step-buttons">
       <div class="left">
         <button class="btn btn-secondary" type="button" onclick="goToStep(5)">&larr; Back to Review</button>
       </div>
-      <div class="right"></div>
+      <div class="right">
+        <button class="btn btn-secondary" type="button" onclick="openCompare()">Compare Scenarios</button>
+      </div>
     </div>
   </div>
 
+</div>
+
+<!-- Compare Mode Overlay -->
+<div class="compare-overlay" id="compareOverlay">
+  <div class="compare-container">
+    <div class="compare-header">
+      <h2>Compare Scenarios</h2>
+      <button class="btn btn-small" onclick="closeCompare()">&times; Close</button>
+    </div>
+    <div class="compare-select-row">
+      <div class="compare-col">
+        <label>Scenario A</label>
+        <select id="compareA"><option value="">— Select —</option></select>
+      </div>
+      <div class="compare-col">
+        <label>Scenario B</label>
+        <select id="compareB"><option value="">— Select —</option></select>
+      </div>
+      <div class="compare-col">
+        <label>Scenario C <span style="color:var(--text-muted)">(optional)</span></label>
+        <select id="compareC"><option value="">— None —</option></select>
+      </div>
+      <button class="btn" type="button" onclick="runCompare()">Compare</button>
+    </div>
+    <div id="compareResults"></div>
+  </div>
 </div>
 
 <script>
@@ -2282,99 +2382,398 @@
   }
 
   // ======================================================================
-  // AI Analysis
+  // AI Analysis (with streaming support)
   // ======================================================================
+  function buildMetricsText() {
+    var r = lastCalcResults;
+    var m = 'Analyze this rental property deal:\n\n';
+    var aiPropName = $('propName').value.trim();
+    if (aiPropName) m += 'Property: ' + aiPropName + '\n';
+    m += 'Property Type: ' + (r.propertyType === 'sfh' ? 'Single Family Home' : 'Multifamily') + '\n';
+    m += 'Purchase Price: ' + fmtDollar(r.price) + '\n';
+    if (r.arv > 0) m += 'ARV: ' + fmtDollar(r.arv) + '\n';
+    if (r.rehab > 0) m += 'Rehab Budget: ' + fmtDollar(r.rehab) + '\n';
+    m += 'Down Payment: ' + r.dpPct + '% (' + fmtDollar(r.dpAmount) + ')\n';
+    m += 'Loan Amount: ' + fmtDollar(r.loanAmount) + '\n';
+    m += 'Interest Rate: ' + r.rate + '%, Loan Term: ' + r.termYears + ' years\n';
+    m += 'Monthly Rent (total): ' + fmtDollar(r.totalMonthlyIncome) + '\n';
+    m += 'Property Taxes/yr: ' + fmtDollar(r.taxesYr) + ', Insurance/yr: ' + fmtDollar(r.insuranceYr) + '\n';
+    m += 'Maintenance: ' + r.maintPct + '%, Vacancy: ' + r.vacPct + '%, CapEx: ' + r.capexPct + '%, Mgmt: ' + r.mgmtPct + '%\n';
+    m += 'HOA/mo: ' + fmtDollar(r.hoaMonth) + ', Utilities/mo: ' + fmtDollar(r.utilMonth) + '\n';
+    m += '\nCalculated Metrics:\n';
+    m += 'Monthly Mortgage (P&I): ' + fmtDollar(r.monthlyPI) + ', PITI: ' + fmtDollar(r.piti) + '\n';
+    m += 'Monthly Cash Flow: ' + fmtDollar(r.monthlyCF) + ', Annual: ' + fmtDollar(r.annualCF) + '\n';
+    m += 'Cash-on-Cash Return: ' + fmtPct(r.coc) + ', Cap Rate: ' + fmtPct(r.capRate) + '\n';
+    m += 'NOI: ' + fmtDollar(r.noi) + ', GRM: ' + fmtGRM(r.grm) + '\n';
+    m += 'Break-even Occupancy: ' + fmtPct(r.breakeven) + ', DSCR: ' + (r.dscr !== null ? fmt(r.dscr) : 'N/A') + '\n';
+    m += 'Total Cash to Close: ' + fmtDollar(r.totalCashClose) + '\n';
+    m += 'OER: ' + fmtPct(r.oer) + ', CF/Unit: ' + fmtDollar(r.monthlyCFPerUnit) + '/mo\n';
+    m += 'Annual Depreciation: ' + fmtDollar(r.annualDepreciation) + ', Tax Savings: ' + fmtDollar(r.annualTaxSavings) + '\n';
+    m += 'After-Tax CF: ' + fmtDollar(r.afterTaxCF) + '/yr\n';
+    if (r.pricePerSqft !== null) m += 'Price/Sqft: ' + fmtDollar(r.pricePerSqft) + ', Rent/Sqft: $' + fmt(r.rentPerSqft) + '\n';
+    m += '\n5-Year Total Return: ' + fmtDollar(r.totalReturn5yr) + '\n';
+    m += '  Cash Flow: ' + fmtDollar(r.totalReturnCF) + ', Appreciation: ' + fmtDollar(r.totalReturnAppreciation) + '\n';
+    m += '  Debt Paydown: ' + fmtDollar(r.totalReturnDebtPaydown) + ', Tax Benefits: ' + fmtDollar(r.totalReturnTaxBenefits) + '\n';
+    m += '5yr Annualized ROI: ' + fmtPct(r.annualized5yrROI) + '\n';
+    m += 'Deal Score: ' + r.dealText + ' (' + r.dealPoints + '/' + r.dealMaxPoints + ' points)\n';
+    r.dealFactors.forEach(function(f) {
+      m += '  ' + f.name + ': ' + f.value + ' [' + f.verdict.toUpperCase() + '] — ' + f.reason + '\n';
+    });
+    return m;
+  }
+
+  function renderMarkdown(raw) {
+    return raw
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/^#{4,} (.+)$/gm, '<h4 style="margin:0.8em 0 0.3em;color:#8be9fd">$1</h4>')
+      .replace(/^### (.+)$/gm, '<h4 style="margin:0.8em 0 0.3em;color:#8be9fd">$1</h4>')
+      .replace(/^## (.+)$/gm, '<h3 style="margin:1em 0 0.4em;color:#8be9fd">$1</h3>')
+      .replace(/^# (.+)$/gm, '<h3 style="margin:1em 0 0.4em;color:#8be9fd">$1</h3>')
+      .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+      .replace(/^\* (.+)$/gm, '<li style="margin-left:1.2em">$1</li>')
+      .replace(/^- (.+)$/gm, '<li style="margin-left:1.2em">$1</li>')
+      .replace(/^\d+\.\s+/gm, function(m) { return '<br>' + m; })
+      .replace(/\n/g, '<br>');
+  }
+
   window.runAI = async function() {
     $('aiError').classList.remove('visible');
     $('aiOutput').classList.remove('visible');
+    $('aiOutput').innerHTML = '';
     $('aiBtn').disabled = true;
     $('aiBtnText').innerHTML = '<span class="spinner"></span> Analyzing...';
 
-    // Build metrics text
-    var r = lastCalcResults;
-    var metricsText = 'Analyze this rental property deal:\n\n';
-    var aiPropName = $('propName').value.trim();
-    if (aiPropName) metricsText += 'Property: ' + aiPropName + '\n';
-    metricsText += 'Property Type: ' + (r.propertyType === 'sfh' ? 'Single Family Home' : 'Multifamily') + '\n';
-    metricsText += 'Purchase Price: ' + fmtDollar(r.price) + '\n';
-    if (r.arv > 0) metricsText += 'ARV: ' + fmtDollar(r.arv) + '\n';
-    if (r.rehab > 0) metricsText += 'Rehab Budget: ' + fmtDollar(r.rehab) + '\n';
-    metricsText += 'Down Payment: ' + r.dpPct + '% (' + fmtDollar(r.dpAmount) + ')\n';
-    metricsText += 'Loan Amount: ' + fmtDollar(r.loanAmount) + '\n';
-    metricsText += 'Interest Rate: ' + r.rate + '%\n';
-    metricsText += 'Loan Term: ' + r.termYears + ' years\n';
-    metricsText += 'Monthly Rent (total): ' + fmtDollar(r.totalMonthlyIncome) + '\n';
-    metricsText += 'Property Taxes/yr: ' + fmtDollar(r.taxesYr) + '\n';
-    metricsText += 'Insurance/yr: ' + fmtDollar(r.insuranceYr) + '\n';
-    metricsText += 'Maintenance: ' + r.maintPct + '%, Vacancy: ' + r.vacPct + '%, CapEx: ' + r.capexPct + '%, Mgmt: ' + r.mgmtPct + '%\n';
-    metricsText += 'HOA/mo: ' + fmtDollar(r.hoaMonth) + ', Utilities/mo: ' + fmtDollar(r.utilMonth) + '\n';
-    metricsText += '\nCalculated Metrics:\n';
-    metricsText += 'Monthly Mortgage (P&I): ' + fmtDollar(r.monthlyPI) + '\n';
-    metricsText += 'Monthly PITI: ' + fmtDollar(r.piti) + '\n';
-    metricsText += 'Monthly Cash Flow: ' + fmtDollar(r.monthlyCF) + '\n';
-    metricsText += 'Annual Cash Flow: ' + fmtDollar(r.annualCF) + '\n';
-    metricsText += 'Cash-on-Cash Return: ' + fmtPct(r.coc) + '\n';
-    metricsText += 'NOI: ' + fmtDollar(r.noi) + '\n';
-    metricsText += 'Cap Rate: ' + fmtPct(r.capRate) + '\n';
-    metricsText += 'GRM: ' + fmtGRM(r.grm) + '\n';
-    metricsText += 'Break-even Occupancy: ' + fmtPct(r.breakeven) + '\n';
-    metricsText += 'DSCR: ' + (r.dscr !== null ? fmt(r.dscr) : 'N/A (cash)') + '\n';
-    metricsText += 'Total Cash to Close: ' + fmtDollar(r.totalCashClose) + '\n';
-    metricsText += 'Operating Expense Ratio: ' + fmtPct(r.oer) + '\n';
-    metricsText += 'Cash Flow per Unit: ' + fmtDollar(r.monthlyCFPerUnit) + '/mo (' + r.unitCount + ' unit' + (r.unitCount > 1 ? 's' : '') + ')\n';
-    metricsText += 'Annual Depreciation: ' + fmtDollar(r.annualDepreciation) + '\n';
-    metricsText += 'Annual Tax Savings: ' + fmtDollar(r.annualTaxSavings) + '\n';
-    metricsText += 'After-Tax Cash Flow: ' + fmtDollar(r.afterTaxCF) + '/yr\n';
-    if (r.pricePerSqft !== null) metricsText += 'Price/Sqft: ' + fmtDollar(r.pricePerSqft) + '\n';
-    if (r.rentPerSqft !== null) metricsText += 'Rent/Sqft: $' + fmt(r.rentPerSqft) + '\n';
-    metricsText += '\n5-Year Total Return Breakdown:\n';
-    metricsText += '  Cash Flow: ' + fmtDollar(r.totalReturnCF) + '\n';
-    metricsText += '  Appreciation: ' + fmtDollar(r.totalReturnAppreciation) + '\n';
-    metricsText += '  Debt Paydown: ' + fmtDollar(r.totalReturnDebtPaydown) + '\n';
-    metricsText += '  Tax Benefits: ' + fmtDollar(r.totalReturnTaxBenefits) + '\n';
-    metricsText += '  TOTAL 5yr Return: ' + fmtDollar(r.totalReturn5yr) + '\n';
-    metricsText += '\n5yr Annualized ROI: ' + fmtPct(r.annualized5yrROI) + '\n';
-    metricsText += 'Deal Score: ' + r.dealText + ' (' + r.dealPoints + '/' + r.dealMaxPoints + ' points)\n';
-    r.dealFactors.forEach(function(f) {
-      metricsText += '  ' + f.name + ': ' + f.value + ' [' + f.verdict.toUpperCase() + '] — ' + f.reason + '\n';
-    });
+    var metricsText = buildMetricsText();
+    var selectedModel = $('aiModelSelect').value || '';
 
     try {
-      var resp = await fetch('/api/analyze-ai', {
+      // Try streaming first
+      var resp = await fetch('/api/analyze-ai-stream', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ metrics: metricsText })
+        body: JSON.stringify({ metrics: metricsText, model: selectedModel })
       });
 
-      var data = await resp.json();
-
-      if (!resp.ok || data.error) {
-        throw new Error(data.error || 'Failed to get AI analysis.');
+      if (!resp.ok) {
+        var errData = await resp.json().catch(function() { return {}; });
+        throw new Error(errData.error || 'AI analysis failed (HTTP ' + resp.status + ')');
       }
 
-      var raw = data.analysis || 'No response received.';
-      // Simple markdown rendering: bold, line breaks, list items
-      var html = raw
-        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-        .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
-        .replace(/^\d+\.\s+/gm, function(m) { return '<br>' + m; })
-        .replace(/\n/g, '<br>');
-      $('aiOutput').innerHTML = html;
+      // Stream tokens
       $('aiOutput').classList.add('visible');
-    } catch (err) {
-      var aiMsg;
-      if (err.message === 'Failed to fetch' || err.name === 'TypeError') {
-        aiMsg = 'Could not reach AI service. Check your connection and try again.';
-        showConnectionBanner();
-      } else {
-        aiMsg = err.message || 'Failed to get AI analysis. Please try again.';
+      var reader = resp.body.getReader();
+      var decoder = new TextDecoder();
+      var buffer = '';
+      var fullText = '';
+
+      while (true) {
+        var result = await reader.read();
+        if (result.done) break;
+        buffer += decoder.decode(result.value, { stream: true });
+
+        var lines = buffer.split('\n');
+        buffer = lines.pop(); // keep incomplete line
+
+        for (var i = 0; i < lines.length; i++) {
+          var line = lines[i].trim();
+          if (!line.startsWith('data: ')) continue;
+          var payload = line.slice(6);
+          if (payload === '[DONE]') continue;
+          try {
+            var evt = JSON.parse(payload);
+            if (evt.token) {
+              fullText += evt.token;
+              $('aiOutput').innerHTML = renderMarkdown(fullText);
+            }
+          } catch(e) {}
+        }
       }
-      $('aiError').textContent = aiMsg;
-      $('aiError').classList.add('visible');
+
+      if (!fullText.trim()) {
+        throw new Error('No response received from AI.');
+      }
+    } catch (err) {
+      // Fallback to non-streaming if stream endpoint not available
+      if (err.message && err.message.indexOf('404') > -1) {
+        try {
+          var resp2 = await fetch('/api/analyze-ai', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ metrics: metricsText, model: selectedModel })
+          });
+          var data = await resp2.json();
+          if (!resp2.ok || data.error) throw new Error(data.error || 'Failed.');
+          $('aiOutput').innerHTML = renderMarkdown(data.analysis || 'No response.');
+          $('aiOutput').classList.add('visible');
+        } catch (err2) {
+          $('aiError').textContent = err2.message;
+          $('aiError').classList.add('visible');
+        }
+      } else {
+        var aiMsg = (err.message === 'Failed to fetch' || err.name === 'TypeError')
+          ? 'Could not reach AI service. Check your connection.'
+          : (err.message || 'Failed to get AI analysis.');
+        $('aiError').textContent = aiMsg;
+        $('aiError').classList.add('visible');
+        if (err.message === 'Failed to fetch') showConnectionBanner();
+      }
     } finally {
       $('aiBtn').disabled = false;
       $('aiBtnText').textContent = 'Run AI Analysis';
     }
+  };
+
+  // ======================================================================
+  // Model Selector
+  // ======================================================================
+  async function loadModels() {
+    try {
+      var resp = await fetch('/api/models');
+      if (!resp.ok) return;
+      var data = await resp.json();
+      var sel = $('aiModelSelect');
+      sel.innerHTML = '';
+      if (data.models && data.models.length > 0) {
+        data.models.forEach(function(m) {
+          var opt = document.createElement('option');
+          opt.value = m.id;
+          opt.textContent = m.name || m.id;
+          if (m.id === data.current) opt.selected = true;
+          sel.appendChild(opt);
+        });
+      } else {
+        sel.innerHTML = '<option value="">No models found</option>';
+      }
+    } catch(e) {
+      $('aiModelSelect').innerHTML = '<option value="">Default model</option>';
+    }
+  }
+
+  // ======================================================================
+  // HTML Download
+  // ======================================================================
+  window.downloadHTML = function() {
+    var clone = document.documentElement.cloneNode(true);
+    // Remove non-result elements
+    var removeSelectors = ['.wizard-nav','.step-buttons','.url-row','.url-error',
+      '.property-card','.scenario-toolbar','.compare-overlay','.connection-banner',
+      '#downloadBtn','#downloadHtmlBtn','.ai-controls select','#aiBtn','script'];
+    removeSelectors.forEach(function(sel) {
+      clone.querySelectorAll(sel).forEach(function(el) { el.remove(); });
+    });
+    // Show only step 6
+    clone.querySelectorAll('.step-panel').forEach(function(p) {
+      p.style.display = p.dataset.step === '6' ? 'block' : 'none';
+    });
+    var html = '<!DOCTYPE html>\n' + clone.outerHTML;
+    var blob = new Blob([html], { type: 'text/html' });
+    var a = document.createElement('a');
+    var name = $('propName').value.trim().replace(/[^a-zA-Z0-9]/g, '_') || 'report';
+    a.href = URL.createObjectURL(blob);
+    a.download = name + '_report.html';
+    a.click();
+    URL.revokeObjectURL(a.href);
+  };
+
+  // ======================================================================
+  // Scenario Save/Load (localStorage)
+  // ======================================================================
+  var SCENARIO_KEY = 'rpda_scenarios';
+
+  var SAVE_FIELDS = [
+    'propName','purchasePrice','arv','closingCosts','rehabBudget','valueGrowth',
+    'sqft','buildingPct','taxRate','downPayment','interestRate','loanTerm','points',
+    'monthlyRent','otherIncome','incomeGrowth','propertyTaxes','insurance',
+    'maintenance','vacancy','capex','management','hoa','utilities','otherExpenses',
+    'expenseGrowth','unitCount'
+  ];
+
+  function getSavedScenarios() {
+    try { return JSON.parse(localStorage.getItem(SCENARIO_KEY)) || {}; }
+    catch(e) { return {}; }
+  }
+
+  function refreshScenarioList() {
+    var scenarios = getSavedScenarios();
+    var keys = Object.keys(scenarios).sort();
+    var sel = $('scenarioSelect');
+    sel.innerHTML = '<option value="">— Saved Scenarios (' + keys.length + ') —</option>';
+    keys.forEach(function(k) {
+      var opt = document.createElement('option');
+      opt.value = k;
+      opt.textContent = k;
+      sel.appendChild(opt);
+    });
+    $('scenarioCount').textContent = keys.length > 0 ? keys.length + ' saved' : '';
+    // Also update compare selects
+    ['compareA','compareB','compareC'].forEach(function(id) {
+      var csel = $(id);
+      if (!csel) return;
+      var cur = csel.value;
+      csel.innerHTML = '<option value="">— Select —</option>';
+      keys.forEach(function(k) {
+        var opt = document.createElement('option');
+        opt.value = k; opt.textContent = k;
+        if (k === cur) opt.selected = true;
+        csel.appendChild(opt);
+      });
+    });
+  }
+
+  window.saveScenario = function() {
+    var name = $('propName').value.trim() || prompt('Name this scenario:');
+    if (!name) return;
+    var scenarios = getSavedScenarios();
+    var data = { propertyType: propertyType };
+    SAVE_FIELDS.forEach(function(f) {
+      var el = $(f);
+      if (el) data[f] = el.value;
+    });
+    // Also save checkbox state
+    data.cashPurchase = $('cashPurchase') ? $('cashPurchase').checked : false;
+    // Save calculated results for compare mode
+    if (lastCalcResults && lastCalcResults.monthlyCF !== undefined) {
+      data._results = {
+        monthlyCF: lastCalcResults.monthlyCF,
+        coc: lastCalcResults.coc,
+        capRate: lastCalcResults.capRate,
+        noi: lastCalcResults.noi,
+        dscr: lastCalcResults.dscr,
+        grm: lastCalcResults.grm,
+        breakeven: lastCalcResults.breakeven,
+        oer: lastCalcResults.oer,
+        annualCF: lastCalcResults.annualCF,
+        totalReturn5yr: lastCalcResults.totalReturn5yr,
+        annualized5yrROI: lastCalcResults.annualized5yrROI,
+        dealPoints: lastCalcResults.dealPoints,
+        dealMaxPoints: lastCalcResults.dealMaxPoints,
+        dealText: lastCalcResults.dealText,
+        price: lastCalcResults.price,
+        totalCashClose: lastCalcResults.totalCashClose
+      };
+    }
+    data._savedAt = new Date().toISOString();
+    scenarios[name] = data;
+    localStorage.setItem(SCENARIO_KEY, JSON.stringify(scenarios));
+    refreshScenarioList();
+    $('scenarioSelect').value = name;
+  };
+
+  window.loadScenario = function() {
+    var name = $('scenarioSelect').value;
+    if (!name) return;
+    var scenarios = getSavedScenarios();
+    var data = scenarios[name];
+    if (!data) return;
+    // Set property type
+    if (data.propertyType) setPropertyType(data.propertyType);
+    // Fill fields
+    SAVE_FIELDS.forEach(function(f) {
+      var el = $(f);
+      if (el && data[f] !== undefined) el.value = data[f];
+    });
+    // Checkbox
+    if ($('cashPurchase') && data.cashPurchase !== undefined) {
+      $('cashPurchase').checked = data.cashPurchase;
+      toggleCashPurchase();
+    }
+    calculate();
+    updateDpHelper();
+    goToStep(1);
+  };
+
+  window.deleteScenario = function() {
+    var name = $('scenarioSelect').value;
+    if (!name) return;
+    if (!confirm('Delete "' + name + '"?')) return;
+    var scenarios = getSavedScenarios();
+    delete scenarios[name];
+    localStorage.setItem(SCENARIO_KEY, JSON.stringify(scenarios));
+    refreshScenarioList();
+  };
+
+  // ======================================================================
+  // Compare Mode
+  // ======================================================================
+  window.openCompare = function() {
+    refreshScenarioList();
+    $('compareOverlay').classList.add('visible');
+  };
+
+  window.closeCompare = function() {
+    $('compareOverlay').classList.remove('visible');
+  };
+
+  window.runCompare = function() {
+    var scenarios = getSavedScenarios();
+    var keys = [
+      $('compareA').value,
+      $('compareB').value,
+      $('compareC').value
+    ].filter(function(k) { return k && scenarios[k]; });
+
+    if (keys.length < 2) {
+      alert('Select at least 2 scenarios to compare.');
+      return;
+    }
+
+    var metrics = [
+      { key: 'price', label: 'Purchase Price', fmt: fmtDollar, higher: false },
+      { key: 'totalCashClose', label: 'Cash to Close', fmt: fmtDollar, higher: false },
+      { key: 'monthlyCF', label: 'Monthly Cash Flow', fmt: fmtDollar, higher: true },
+      { key: 'annualCF', label: 'Annual Cash Flow', fmt: fmtDollar, higher: true },
+      { key: 'coc', label: 'Cash-on-Cash Return', fmt: fmtPct, higher: true },
+      { key: 'capRate', label: 'Cap Rate', fmt: fmtPct, higher: true },
+      { key: 'noi', label: 'NOI', fmt: fmtDollar, higher: true },
+      { key: 'dscr', label: 'DSCR', fmt: function(v) { return v !== null ? fmt(v) : 'N/A'; }, higher: true },
+      { key: 'grm', label: 'GRM', fmt: fmtGRM, higher: false },
+      { key: 'breakeven', label: 'Break-Even Occ.', fmt: fmtPct, higher: false },
+      { key: 'oer', label: 'OER', fmt: fmtPct, higher: false },
+      { key: 'totalReturn5yr', label: '5yr Total Return', fmt: fmtDollar, higher: true },
+      { key: 'annualized5yrROI', label: '5yr ROI', fmt: fmtPct, higher: true },
+      { key: 'dealPoints', label: 'Deal Score', fmt: function(v, d) { return v + '/' + (d.dealMaxPoints || 14); }, higher: true }
+    ];
+
+    var html = '<table class="compare-table"><thead><tr><th>Metric</th>';
+    keys.forEach(function(k) { html += '<th>' + k + '</th>'; });
+    html += '</tr></thead><tbody>';
+
+    // Deal verdict row
+    html += '<tr><td><strong>Verdict</strong></td>';
+    keys.forEach(function(k) {
+      var d = scenarios[k]._results || {};
+      html += '<td><strong>' + (d.dealText || '—') + '</strong></td>';
+    });
+    html += '</tr>';
+
+    metrics.forEach(function(m) {
+      var vals = keys.map(function(k) {
+        var d = scenarios[k]._results || {};
+        return d[m.key];
+      });
+
+      // Find best/worst
+      var numVals = vals.filter(function(v) { return v !== null && v !== undefined && !isNaN(v); });
+      var best = m.higher ? Math.max.apply(null, numVals) : Math.min.apply(null, numVals);
+      var worst = m.higher ? Math.min.apply(null, numVals) : Math.max.apply(null, numVals);
+
+      html += '<tr><td>' + m.label + '</td>';
+      keys.forEach(function(k, i) {
+        var d = scenarios[k]._results || {};
+        var v = vals[i];
+        var cls = '';
+        if (numVals.length > 1 && v !== null && v !== undefined) {
+          if (v === best) cls = ' class="compare-best"';
+          else if (v === worst && numVals.length > 2) cls = ' class="compare-worst"';
+        }
+        var display = (v !== null && v !== undefined) ? m.fmt(v, d) : '—';
+        html += '<td' + cls + '>' + display + '</td>';
+      });
+      html += '</tr>';
+    });
+
+    html += '</tbody></table>';
+    $('compareResults').innerHTML = html;
   };
 
   // ======================================================================
@@ -2417,6 +2816,8 @@
   // Initial setup
   updateDpHelper();
   calculate();
+  refreshScenarioList();
+  loadModels();
 
 })();
 </script>

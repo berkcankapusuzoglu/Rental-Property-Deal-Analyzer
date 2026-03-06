@@ -4,6 +4,7 @@ from urllib.parse import urlparse
 from dotenv import load_dotenv
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, JSONResponse
+from starlette.responses import StreamingResponse
 import httpx
 from bs4 import BeautifulSoup
 import uvicorn
@@ -442,16 +443,10 @@ def _strip_thinking(text: str) -> str:
     return text
 
 
-async def _analyze_with_ollama(metrics: str) -> str:
+async def _analyze_with_ollama(metrics: str, model_override: str | None = None) -> str:
     """Call local Ollama API."""
     ollama_url = os.getenv("OLLAMA_URL", "http://localhost:11434")
-    ollama_model = os.getenv("OLLAMA_MODEL", "llama3.2:3b")
-    # For thinking models (qwen3, deepseek-r1), prepend /no_think to the
-    # user message to disable internal reasoning and speed up inference,
-    # especially important on CPU-only setups.
-    user_content = metrics
-    if any(t in ollama_model.lower() for t in ("qwen3", "deepseek-r1")):
-        user_content = "/no_think\n" + metrics
+    ollama_model = model_override or os.getenv("OLLAMA_MODEL", "llama3.2:3b")
     async with httpx.AsyncClient(timeout=300) as client:
         resp = await client.post(
             f"{ollama_url}/api/chat",
@@ -459,7 +454,7 @@ async def _analyze_with_ollama(metrics: str) -> str:
                 "model": ollama_model,
                 "messages": [
                     {"role": "system", "content": AI_SYSTEM_PROMPT},
-                    {"role": "user", "content": user_content},
+                    {"role": "user", "content": metrics},
                 ],
                 "stream": False,
             },
@@ -470,18 +465,15 @@ async def _analyze_with_ollama(metrics: str) -> str:
     return _strip_thinking(data["message"]["content"])
 
 
-async def _analyze_with_lmstudio(metrics: str) -> str:
+async def _analyze_with_lmstudio(metrics: str, model_override: str | None = None) -> str:
     """Call LM Studio's OpenAI-compatible API."""
     lmstudio_url = os.getenv("LMSTUDIO_URL", "http://localhost:1234")
-    lmstudio_model = os.getenv("LMSTUDIO_MODEL", "")  # empty = use whatever is loaded
-    user_content = metrics
-    if lmstudio_model and any(t in lmstudio_model.lower() for t in ("qwen3", "deepseek")):
-        user_content = "/no_think\n" + metrics
+    lmstudio_model = model_override or os.getenv("LMSTUDIO_MODEL", "")  # empty = use whatever is loaded
     async with httpx.AsyncClient(timeout=300) as client:
         payload = {
             "messages": [
                 {"role": "system", "content": AI_SYSTEM_PROMPT},
-                {"role": "user", "content": user_content},
+                {"role": "user", "content": metrics},
             ],
             "temperature": 0.7,
             "max_tokens": 8192,
@@ -499,8 +491,9 @@ async def _analyze_with_lmstudio(metrics: str) -> str:
     return _strip_thinking(data["choices"][0]["message"]["content"])
 
 
-async def _analyze_with_anthropic(metrics: str, api_key: str) -> str:
+async def _analyze_with_anthropic(metrics: str, api_key: str, model_override: str | None = None) -> str:
     """Call Anthropic Claude API."""
+    anthropic_model = model_override or "claude-sonnet-4-20250514"
     async with httpx.AsyncClient(timeout=30) as client:
         resp = await client.post(
             "https://api.anthropic.com/v1/messages",
@@ -510,7 +503,7 @@ async def _analyze_with_anthropic(metrics: str, api_key: str) -> str:
                 "Content-Type": "application/json",
             },
             json={
-                "model": "claude-sonnet-4-20250514",
+                "model": anthropic_model,
                 "max_tokens": 1024,
                 "system": AI_SYSTEM_PROMPT,
                 "messages": [{"role": "user", "content": metrics}],
@@ -522,10 +515,18 @@ async def _analyze_with_anthropic(metrics: str, api_key: str) -> str:
     return data["content"][0]["text"]
 
 
+def _resolve_provider():
+    """Return (provider, api_key) based on env configuration."""
+    api_key = os.getenv("ANTHROPIC_API_KEY")
+    provider = os.getenv("AI_PROVIDER", "auto").lower()
+    return provider, api_key
+
+
 @app.post("/api/analyze-ai")
 async def analyze_ai(request: Request):
     body = await request.json()
     metrics = body.get("metrics", "")
+    model = body.get("model")  # optional model override
     if not metrics:
         return JSONResponse(
             {"error": "Missing 'metrics' in request body."},
@@ -533,13 +534,12 @@ async def analyze_ai(request: Request):
         )
 
     # Determine AI provider
-    api_key = os.getenv("ANTHROPIC_API_KEY")
-    provider = os.getenv("AI_PROVIDER", "auto").lower()
+    provider, api_key = _resolve_provider()
 
     # LM Studio provider
     if provider == "lmstudio":
         try:
-            text = await _analyze_with_lmstudio(metrics)
+            text = await _analyze_with_lmstudio(metrics, model_override=model)
             return JSONResponse({"analysis": text, "provider": "lmstudio"})
         except Exception as exc:
             return JSONResponse(
@@ -547,10 +547,26 @@ async def analyze_ai(request: Request):
                 status_code=502,
             )
 
+    # Auto mode: try lmstudio first, then ollama, then anthropic
+    if provider == "auto":
+        # Try LM Studio
+        lmstudio_url = os.getenv("LMSTUDIO_URL", "http://localhost:1234")
+        try:
+            async with httpx.AsyncClient(timeout=3) as client:
+                probe = await client.get(f"{lmstudio_url}/v1/models")
+            if probe.status_code == 200:
+                try:
+                    text = await _analyze_with_lmstudio(metrics, model_override=model)
+                    return JSONResponse({"analysis": text, "provider": "lmstudio"})
+                except Exception:
+                    pass
+        except Exception:
+            pass
+
     # Ollama provider (explicit or auto-detected)
     if provider == "ollama" or (provider == "auto" and not api_key):
         try:
-            text = await _analyze_with_ollama(metrics)
+            text = await _analyze_with_ollama(metrics, model_override=model)
             return JSONResponse({"analysis": text, "provider": "ollama"})
         except Exception as exc:
             if api_key:
@@ -568,7 +584,7 @@ async def analyze_ai(request: Request):
         )
 
     try:
-        text = await _analyze_with_anthropic(metrics, api_key)
+        text = await _analyze_with_anthropic(metrics, api_key, model_override=model)
         return JSONResponse({"analysis": text, "provider": "anthropic"})
     except (httpx.RequestError, httpx.TimeoutException):
         return JSONResponse(
@@ -582,11 +598,395 @@ async def analyze_ai(request: Request):
         )
 
 
+# ---------------------------------------------------------------------------
+# GET /api/models — list available models from the configured AI provider
+# ---------------------------------------------------------------------------
+
+ANTHROPIC_MODELS = [
+    {"id": "claude-sonnet-4-20250514", "name": "Claude Sonnet 4"},
+    {"id": "claude-haiku-4-20250414", "name": "Claude Haiku 4"},
+    {"id": "claude-opus-4-20250514", "name": "Claude Opus 4"},
+]
+
+
+async def _get_lmstudio_models() -> dict | None:
+    """Fetch models from LM Studio. Returns dict or None on failure."""
+    lmstudio_url = os.getenv("LMSTUDIO_URL", "http://localhost:1234")
+    current = os.getenv("LMSTUDIO_MODEL", "")
+    try:
+        async with httpx.AsyncClient(timeout=5) as client:
+            resp = await client.get(f"{lmstudio_url}/v1/models")
+        if resp.status_code != 200:
+            return None
+        data = resp.json()
+        models = []
+        for m in data.get("data", []):
+            mid = m.get("id", "")
+            # Filter out embedding models
+            if "embed" in mid.lower():
+                continue
+            models.append({"id": mid, "name": mid})
+        if not current and models:
+            current = models[0]["id"]
+        return {"provider": "lmstudio", "models": models, "current": current}
+    except Exception:
+        return None
+
+
+async def _get_ollama_models() -> dict | None:
+    """Fetch models from Ollama. Returns dict or None on failure."""
+    ollama_url = os.getenv("OLLAMA_URL", "http://localhost:11434")
+    current = os.getenv("OLLAMA_MODEL", "llama3.2:3b")
+    try:
+        async with httpx.AsyncClient(timeout=5) as client:
+            resp = await client.get(f"{ollama_url}/api/tags")
+        if resp.status_code != 200:
+            return None
+        data = resp.json()
+        models = []
+        for m in data.get("models", []):
+            mid = m.get("name", "") or m.get("model", "")
+            models.append({"id": mid, "name": mid})
+        return {"provider": "ollama", "models": models, "current": current}
+    except Exception:
+        return None
+
+
+def _get_anthropic_models() -> dict | None:
+    """Return hardcoded Anthropic models if API key is set."""
+    api_key = os.getenv("ANTHROPIC_API_KEY")
+    if not api_key:
+        return None
+    return {
+        "provider": "anthropic",
+        "models": ANTHROPIC_MODELS,
+        "current": "claude-sonnet-4-20250514",
+    }
+
+
+@app.get("/api/models")
+async def list_models():
+    provider, api_key = _resolve_provider()
+
+    if provider == "lmstudio":
+        result = await _get_lmstudio_models()
+        if result:
+            return JSONResponse(result)
+        return JSONResponse({"error": "LM Studio is not reachable."}, status_code=502)
+
+    if provider == "ollama":
+        result = await _get_ollama_models()
+        if result:
+            return JSONResponse(result)
+        return JSONResponse({"error": "Ollama is not reachable."}, status_code=502)
+
+    if provider == "anthropic":
+        result = _get_anthropic_models()
+        if result:
+            return JSONResponse(result)
+        return JSONResponse({"error": "ANTHROPIC_API_KEY is not set."}, status_code=400)
+
+    # auto: try lmstudio -> ollama -> anthropic
+    result = await _get_lmstudio_models()
+    if result:
+        return JSONResponse(result)
+
+    result = await _get_ollama_models()
+    if result:
+        return JSONResponse(result)
+
+    result = _get_anthropic_models()
+    if result:
+        return JSONResponse(result)
+
+    return JSONResponse(
+        {"error": "No AI provider available."},
+        status_code=502,
+    )
+
+
+# ---------------------------------------------------------------------------
+# POST /api/analyze-ai-stream — SSE streaming version of analyze-ai
+# ---------------------------------------------------------------------------
+
+async def _stream_lmstudio(metrics: str, model_override: str | None = None):
+    """Stream from LM Studio's OpenAI-compatible API."""
+    lmstudio_url = os.getenv("LMSTUDIO_URL", "http://localhost:1234")
+    lmstudio_model = model_override or os.getenv("LMSTUDIO_MODEL", "")
+
+    payload = {
+        "messages": [
+            {"role": "system", "content": AI_SYSTEM_PROMPT},
+            {"role": "user", "content": metrics},
+        ],
+        "temperature": 0.7,
+        "max_tokens": 8192,
+        "stream": True,
+    }
+    if lmstudio_model:
+        payload["model"] = lmstudio_model
+
+    async with httpx.AsyncClient(timeout=300) as client:
+        async with client.stream(
+            "POST", f"{lmstudio_url}/v1/chat/completions", json=payload
+        ) as resp:
+            if resp.status_code != 200:
+                body = await resp.aread()
+                yield f"data: {json.dumps({'error': f'LM Studio error: {resp.status_code} - {body[:200].decode()}'})}\n\n"
+                return
+            buffer = ""
+            in_think = False
+            found_header = False
+            pending = ""
+            async for line in resp.aiter_lines():
+                if not line.startswith("data: "):
+                    continue
+                data_str = line[6:].strip()
+                if data_str == "[DONE]":
+                    break
+                try:
+                    chunk = json.loads(data_str)
+                except json.JSONDecodeError:
+                    continue
+                delta = chunk.get("choices", [{}])[0].get("delta", {})
+                token = delta.get("content", "")
+                if not token:
+                    continue
+
+                # Strip thinking: handle <think> tags
+                processed = _process_stream_token(token, buffer, in_think, found_header, pending)
+                buffer = processed["buffer"]
+                in_think = processed["in_think"]
+                found_header = processed["found_header"]
+                pending = processed["pending"]
+                if processed["output"]:
+                    yield f"data: {json.dumps({'token': processed['output'], 'done': False})}\n\n"
+    yield f"data: {json.dumps({'token': '', 'done': True})}\n\n"
+
+
+async def _stream_ollama(metrics: str, model_override: str | None = None):
+    """Stream from Ollama API."""
+    ollama_url = os.getenv("OLLAMA_URL", "http://localhost:11434")
+    ollama_model = model_override or os.getenv("OLLAMA_MODEL", "llama3.2:3b")
+
+    payload = {
+        "model": ollama_model,
+        "messages": [
+            {"role": "system", "content": AI_SYSTEM_PROMPT},
+            {"role": "user", "content": metrics},
+        ],
+        "stream": True,
+    }
+
+    async with httpx.AsyncClient(timeout=300) as client:
+        async with client.stream(
+            "POST", f"{ollama_url}/api/chat", json=payload
+        ) as resp:
+            if resp.status_code != 200:
+                body = await resp.aread()
+                yield f"data: {json.dumps({'error': f'Ollama error: {resp.status_code} - {body[:200].decode()}'})}\n\n"
+                return
+            buffer = ""
+            in_think = False
+            found_header = False
+            pending = ""
+            async for line in resp.aiter_lines():
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    chunk = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                token = chunk.get("message", {}).get("content", "")
+                if not token:
+                    if chunk.get("done"):
+                        break
+                    continue
+
+                processed = _process_stream_token(token, buffer, in_think, found_header, pending)
+                buffer = processed["buffer"]
+                in_think = processed["in_think"]
+                found_header = processed["found_header"]
+                pending = processed["pending"]
+                if processed["output"]:
+                    yield f"data: {json.dumps({'token': processed['output'], 'done': False})}\n\n"
+    yield f"data: {json.dumps({'token': '', 'done': True})}\n\n"
+
+
+async def _stream_anthropic(metrics: str, api_key: str, model_override: str | None = None):
+    """Stream from Anthropic API."""
+    anthropic_model = model_override or "claude-sonnet-4-20250514"
+    async with httpx.AsyncClient(timeout=300) as client:
+        async with client.stream(
+            "POST",
+            "https://api.anthropic.com/v1/messages",
+            headers={
+                "x-api-key": api_key,
+                "anthropic-version": "2023-06-01",
+                "Content-Type": "application/json",
+            },
+            json={
+                "model": anthropic_model,
+                "max_tokens": 1024,
+                "system": AI_SYSTEM_PROMPT,
+                "messages": [{"role": "user", "content": metrics}],
+                "stream": True,
+            },
+        ) as resp:
+            if resp.status_code != 200:
+                body = await resp.aread()
+                yield f"data: {json.dumps({'error': f'Anthropic error: {resp.status_code} - {body[:200].decode()}'})}\n\n"
+                return
+            async for line in resp.aiter_lines():
+                if not line.startswith("data: "):
+                    continue
+                data_str = line[6:].strip()
+                if not data_str:
+                    continue
+                try:
+                    chunk = json.loads(data_str)
+                except json.JSONDecodeError:
+                    continue
+                event_type = chunk.get("type", "")
+                if event_type == "content_block_delta":
+                    delta = chunk.get("delta", {})
+                    token = delta.get("text", "")
+                    if token:
+                        yield f"data: {json.dumps({'token': token, 'done': False})}\n\n"
+                elif event_type == "message_stop":
+                    break
+    yield f"data: {json.dumps({'token': '', 'done': True})}\n\n"
+
+
+def _process_stream_token(
+    token: str, buffer: str, in_think: bool, found_header: bool, pending: str
+) -> dict:
+    """Process a streaming token, stripping thinking blocks.
+
+    Returns dict with keys: output, buffer, in_think, found_header, pending.
+    """
+    output = ""
+    full = buffer + token
+
+    # Handle <think> tags
+    while True:
+        if in_think:
+            end_idx = full.find("</think>")
+            if end_idx == -1:
+                # Still inside think block, consume everything
+                return {"output": output, "buffer": "", "in_think": True, "found_header": found_header, "pending": pending}
+            else:
+                full = full[end_idx + 8:]
+                in_think = False
+        else:
+            start_idx = full.find("<think>")
+            if start_idx != -1:
+                # Text before <think> is real content
+                before = full[:start_idx]
+                if before:
+                    pending += before
+                full = full[start_idx + 7:]
+                in_think = True
+            else:
+                break
+
+    pending += full
+
+    # If we haven't found the analysis header yet, check if the pending text
+    # has enough content to determine it starts with "Thinking Process" or similar.
+    if not found_header:
+        # Check if the pending text contains an analysis header
+        header = re.search(
+            r"^(#{1,3}\s+|\*\*\s*|\d+[\.\)]\s*\*\*\s*)"
+            r"(Overall|Investment|Key Strength|Key Risk|Recommendation|Summary|Assessment|Analysis)",
+            pending, re.MULTILINE | re.IGNORECASE,
+        )
+        if header and header.start() > 100:
+            # There's a thinking preamble — skip it
+            pending = pending[header.start():]
+            found_header = True
+            output += pending
+            pending = ""
+        elif header:
+            # Header found near the start — this is real content
+            found_header = True
+            output += pending
+            pending = ""
+        elif len(pending) > 300:
+            # We've buffered enough without finding a thinking preamble, just emit
+            found_header = True
+            output += pending
+            pending = ""
+        # else: keep buffering
+    else:
+        output += pending
+        pending = ""
+
+    return {"output": output, "buffer": "", "in_think": in_think, "found_header": found_header, "pending": pending}
+
+
+@app.post("/api/analyze-ai-stream")
+async def analyze_ai_stream(request: Request):
+    body = await request.json()
+    metrics = body.get("metrics", "")
+    model = body.get("model")  # optional model override
+    if not metrics:
+        return JSONResponse(
+            {"error": "Missing 'metrics' in request body."},
+            status_code=400,
+        )
+
+    provider, api_key = _resolve_provider()
+
+    async def _pick_generator():
+        # LM Studio explicit
+        if provider == "lmstudio":
+            return _stream_lmstudio(metrics, model_override=model)
+
+        # Auto: try lmstudio first
+        if provider == "auto":
+            lmstudio_url = os.getenv("LMSTUDIO_URL", "http://localhost:1234")
+            try:
+                async with httpx.AsyncClient(timeout=3) as client:
+                    probe = await client.get(f"{lmstudio_url}/v1/models")
+                if probe.status_code == 200:
+                    return _stream_lmstudio(metrics, model_override=model)
+            except Exception:
+                pass
+
+        # Ollama explicit or auto fallback
+        if provider == "ollama" or (provider == "auto" and not api_key):
+            return _stream_ollama(metrics, model_override=model)
+
+        # Anthropic
+        if api_key:
+            return _stream_anthropic(metrics, api_key, model_override=model)
+
+        return None
+
+    gen = await _pick_generator()
+    if gen is None:
+        return JSONResponse(
+            {"error": f"No AI provider available. Configure one in .env."},
+            status_code=400,
+        )
+
+    return StreamingResponse(
+        gen,
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
+
+
 def open_browser():
     webbrowser.open("http://localhost:8000")
 
 
 if __name__ == "__main__":
-    if os.getenv("NO_BROWSER") != "1":
-        threading.Timer(1.5, open_browser).start()
+    threading.Timer(1.5, open_browser).start()
     uvicorn.run(app, host="127.0.0.1", port=8000)
