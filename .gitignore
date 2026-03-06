@@ -2,3 +2,6 @@
 __pycache__/
 *.pyc
 .venv/
+CLAUDE.md
+.claude/
+docs/plans
