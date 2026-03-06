@@ -10,6 +10,8 @@ Free, open-source rental property investment calculator with AI-powered analysis
 ![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)
 ![GitHub release](https://img.shields.io/github/v/release/berkcankapusuzoglu/Rental-Property-Deal-Analyzer)
 
+[**Try the Live Demo**](https://rental-property-deal-analyzer.onrender.com)
+
 <a href="https://buymeacoffee.com/bkapu"><img src="https://img.shields.io/badge/Buy%20Me%20a%20Coffee-ffdd00?style=for-the-badge&logo=buy-me-a-coffee&logoColor=black" alt="Buy Me a Coffee"></a>
 <a href="https://github.com/sponsors/berkcankapusuzoglu"><img src="https://img.shields.io/badge/Sponsor-ea4aaa?style=for-the-badge&logo=github-sponsors&logoColor=white" alt="GitHub Sponsors"></a>
 
