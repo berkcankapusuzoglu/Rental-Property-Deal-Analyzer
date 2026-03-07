@@ -231,7 +231,7 @@ Zillow aggressively blocks automated requests. The scraper tries httpx first, th
 If this tool helped you evaluate a deal, consider supporting its development:
 
 <a href="https://buymeacoffee.com/bkapu">
-  <img src="https://img.buymeacoffee.com/button-api/?text=Buy me a coffee&emoji=&slug=bkapu&button_colour=FFDD00&font_colour=000000&font_family=Cookie&outline_colour=000000&coffee_colour=ffffff" alt="Buy Me a Coffee" />
+  <img src="https://img.shields.io/badge/Buy%20Me%20a%20Coffee-ffdd00?style=for-the-badge&logo=buy-me-a-coffee&logoColor=black" alt="Buy Me a Coffee" />
 </a>
 
 Your support helps keep this project free and actively maintained.
