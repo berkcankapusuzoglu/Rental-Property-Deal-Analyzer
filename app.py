@@ -5,6 +5,7 @@ from collections import defaultdict
 from dotenv import load_dotenv
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, JSONResponse
+from json import JSONDecodeError
 from starlette.responses import StreamingResponse
 import httpx
 from bs4 import BeautifulSoup
@@ -12,6 +13,19 @@ import uvicorn
 
 load_dotenv()
 app = FastAPI()
+
+
+async def _parse_json_object(request: Request) -> tuple[dict, JSONResponse | None]:
+    """Parse request JSON and require a top-level object."""
+    try:
+        body = await request.json()
+    except JSONDecodeError:
+        return {}, JSONResponse({"error": "Request body must be valid JSON."}, status_code=400)
+
+    if not isinstance(body, dict):
+        return {}, JSONResponse({"error": "Request body must be a JSON object."}, status_code=400)
+
+    return body, None
 
 
 # ---------------------------------------------------------------------------
@@ -670,8 +684,11 @@ async def scrape_property(request: Request):
     if not _check_rate_limit(f"scrape:{client_ip}", 5):
         return JSONResponse({"error": "Too many requests. Please wait a minute before trying again."}, status_code=429)
 
-    body = await request.json()
-    url = body.get("url", "").strip()
+    body, error_response = await _parse_json_object(request)
+    if error_response:
+        return error_response
+
+    url = str(body.get("url", "")).strip()
 
     # --- Validate URL ---
     if not url:
@@ -891,7 +908,10 @@ async def analyze_ai(request: Request):
     if not _check_rate_limit(f"ai:{client_ip}", 10):
         return JSONResponse({"error": "Too many requests. Please wait before trying again."}, status_code=429)
 
-    body = await request.json()
+    body, error_response = await _parse_json_object(request)
+    if error_response:
+        return error_response
+
     metrics = body.get("metrics", "")
     model = body.get("model")  # optional model override
     if not metrics:
@@ -1305,7 +1325,10 @@ async def analyze_ai_stream(request: Request):
     if not _check_rate_limit(f"ai-stream:{client_ip}", 10):
         return JSONResponse({"error": "Too many requests. Please wait before trying again."}, status_code=429)
 
-    body = await request.json()
+    body, error_response = await _parse_json_object(request)
+    if error_response:
+        return error_response
+
     metrics = body.get("metrics", "")
     model = body.get("model")  # optional model override
     if not metrics:
